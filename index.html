@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apex Expense Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p class="loading-text">Fetching your expenses…</p>
+  </div>
+
+  <!-- Setup modal (shown when no URL is configured) -->
+  <div id="setup-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h2 class="modal-title">Welcome to Apex Expense Tracker</h2>
+      <p class="modal-desc">Paste your Google Sheets CSV link below to get started. You can update this anytime from the settings icon.</p>
+      <label class="input-label" for="setup-url-input">Google Sheets CSV URL</label>
+      <input
+        id="setup-url-input"
+        class="url-input"
+        type="url"
+        placeholder="https://docs.google.com/spreadsheets/d/…/pub?output=csv"
+      />
+      <p id="setup-error" class="input-error hidden">Please enter a valid URL.</p>
+      <button id="setup-save-btn" class="btn-primary">Load Dashboard</button>
+    </div>
+  </div>
+
+  <!-- Settings modal (update URL) -->
+  <div id="settings-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h2 class="modal-title">Update Data Source</h2>
+      <p class="modal-desc">Change the Google Sheets CSV URL. The dashboard will reload with fresh data.</p>
+      <label class="input-label" for="settings-url-input">Google Sheets CSV URL</label>
+      <input id="settings-url-input" class="url-input" type="url" />
+      <p id="settings-error" class="input-error hidden">Please enter a valid URL.</p>
+      <div class="modal-actions">
+        <button id="settings-cancel-btn" class="btn-secondary">Cancel</button>
+        <button id="settings-save-btn" class="btn-primary">Save &amp; Reload</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container" id="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <h1 class="app-title">Apex Expense Tracker</h1>
+        <span id="data-freshness" class="freshness-tag"></span>
+      </div>
+      <div class="header-right">
+        <select id="month-filter" class="month-select" aria-label="Select month"></select>
+        <button id="settings-btn" class="icon-btn" title="Update data source" aria-label="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Error banner -->
+    <div id="error-banner" class="error-banner hidden">
+      <span id="error-text"></span>
+      <button id="retry-btn" class="retry-btn">Retry</button>
+    </div>
+
+    <!-- Row 1: Summary Cards -->
+    <section class="summary-row" aria-label="Summary">
+      <div class="card summary-card" id="card-total">
+        <span class="card-label">Total Spend</span>
+        <span class="card-value" id="val-total">—</span>
+        <span class="card-sub" id="sub-total"></span>
+      </div>
+      <div class="card summary-card" id="card-avg-daily">
+        <span class="card-label">Avg Daily Spend</span>
+        <span class="card-value" id="val-avg-daily">—</span>
+        <span class="card-sub" id="sub-avg-daily"></span>
+      </div>
+      <div class="card summary-card" id="card-txn-count">
+        <span class="card-label">Transactions</span>
+        <span class="card-value" id="val-txn-count">—</span>
+        <span class="card-sub" id="sub-txn-count"></span>
+      </div>
+      <div class="card summary-card" id="card-top-cat">
+        <span class="card-label">Top Category</span>
+        <span class="card-value" id="val-top-cat">—</span>
+        <span class="card-sub" id="sub-top-cat"></span>
+      </div>
+    </section>
+
+    <!-- Row 1b: MoM Delta -->
+    <div class="card mom-card" id="card-mom" aria-label="Month over month comparison">
+      <div class="mom-label">vs last month</div>
+      <div class="mom-values">
+        <span class="mom-delta" id="mom-delta">—</span>
+        <span class="mom-pct" id="mom-pct"></span>
+      </div>
+      <div class="mom-detail" id="mom-detail"></div>
+    </div>
+
+    <!-- Row 2: Donut + Bar -->
+    <section class="two-col-row" aria-label="Charts">
+      <div class="card chart-card">
+        <h2 class="card-heading">Spending by Category</h2>
+        <div class="chart-wrapper">
+          <canvas id="chart-donut" aria-label="Category breakdown donut chart"></canvas>
+        </div>
+      </div>
+      <div class="card chart-card">
+        <h2 class="card-heading">Monthly Overview</h2>
+        <div class="chart-wrapper">
+          <canvas id="chart-bar-mom" aria-label="Month over month bar chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 3: Daily Spending Calendar -->
+    <section class="card calendar-card" aria-label="Daily spending calendar">
+      <div class="calendar-title-row">
+        <h2 class="card-heading no-margin">Daily Spending</h2>
+        <span class="calendar-hint">Tap a day to see details</span>
+      </div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+    </section>
+
+    <!-- Day detail panel (slides in when a date is selected) -->
+    <div class="card day-detail-panel hidden" id="day-detail-panel" aria-label="Day spending detail">
+      <div class="day-detail-header">
+        <div class="day-detail-info">
+          <span class="day-detail-date" id="dd-date"></span>
+          <span class="day-detail-summary" id="dd-total"></span>
+        </div>
+        <button class="icon-btn" id="dd-close-btn" title="Close" aria-label="Close day detail">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table id="dd-table" aria-label="Day transactions">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Description</th>
+              <th class="text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="dd-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Category Breakdown -->
+    <div class="card table-card">
+      <h2 class="card-heading">Category Breakdown</h2>
+      <div class="table-responsive">
+        <table id="cat-breakdown-table" aria-label="Category breakdown">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="text-right">Amount</th>
+              <th class="text-right">Share</th>
+              <th class="text-right">Txns</th>
+            </tr>
+          </thead>
+          <tbody id="cat-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Row 4: Insights Strip -->
+    <section class="card insights-strip" aria-label="Spending insights">
+      <div class="insight-item" id="insight-pace">
+        <span class="insight-label">Spending Pace</span>
+        <span class="insight-value" id="iv-pace">—</span>
+      </div>
+      <div class="insight-item" id="insight-biggest">
+        <span class="insight-label">Biggest Expense</span>
+        <span class="insight-value" id="iv-biggest">—</span>
+      </div>
+      <div class="insight-item" id="insight-busiest-day">
+        <span class="insight-label">Most Expensive Day</span>
+        <span class="insight-value" id="iv-busiest">—</span>
+      </div>
+      <div class="insight-item" id="insight-weekend">
+        <span class="insight-label">Weekday vs Weekend</span>
+        <span class="insight-value" id="iv-weekend">—</span>
+      </div>
+    </section>
+
+    <!-- Row 5: Transaction Table -->
+    <section class="card" aria-label="Transactions">
+      <div class="table-header-row">
+        <h2 class="card-heading no-margin">Transactions</h2>
+        <span class="txn-count-label" id="txn-range-label"></span>
+      </div>
+      <div class="table-responsive">
+        <table id="txn-table" aria-label="Transaction list">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="date">Date <span class="sort-icon">↕</span></th>
+              <th class="sortable" data-sort="category">Category <span class="sort-icon">↕</span></th>
+              <th>Description</th>
+              <th class="sortable text-right" data-sort="amount">Amount <span class="sort-icon">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="txn-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <button id="btn-prev" class="page-btn" disabled>&#8592; Prev</button>
+        <span id="page-indicator" class="page-indicator">Page 1 of 1</span>
+        <button id="btn-next" class="page-btn" disabled>Next &#8594;</button>
+      </div>
+    </section>
+
+  </div><!-- .app-container -->
+
+  <script src="app.js"></script>
+</body>
+</html>
