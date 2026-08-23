@@ -38,6 +38,12 @@ const state = {
     donut:  null,
     barMom: null,
   },
+
+  searchQuery: '',
+  rangeMode:   false,
+  rangeStart:  null,
+  rangeEnd:    null,
+  rangePreset: null,
 };
 
 /* ── Utilities ─────────────────────────────────────────────────────────────── */
@@ -56,6 +62,18 @@ function formatMonthLabel(yyyymm) {
 
 function formatDisplayDate(d) {
   return d.toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function diffDaysInclusive(start, end) {
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function formatRangeLabel(start, end) {
+  return `${formatDisplayDate(start)} – ${formatDisplayDate(end)}`;
+}
+
+function toDateInputValue(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function getCatColor(cat) {
@@ -259,6 +277,22 @@ function getDailyTotals() {
   return { totals, byDay };
 }
 
+function getRangeRows() {
+  if (!state.rangeStart || !state.rangeEnd) return [];
+  return state.allRows.filter(r => r.date >= state.rangeStart && r.date <= state.rangeEnd);
+}
+
+function getFilteredRows() {
+  let rows = state.rangeMode ? getRangeRows() : getMonthRows();
+  const q = state.searchQuery.trim().toLowerCase();
+  if (q) {
+    rows = rows.filter(r =>
+      r.description.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)
+    );
+  }
+  return rows;
+}
+
 /* ── Metrics Computation ──────────────────────────────────────────────────── */
 function computeMetrics() {
   const rows = getMonthRows();
@@ -316,21 +350,61 @@ function computeMetrics() {
   };
 }
 
+/* ── View Metrics (search + date-range aware) ─────────────────────────────── */
+function computeViewMetrics() {
+  const rows = getFilteredRows();
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+
+  const catTotals = {};
+  rows.forEach(r => { catTotals[r.category] = (catTotals[r.category] || 0) + r.amount; });
+  const catSorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+  const topCat = catSorted[0]?.[0] || '—';
+  const topCatAmt = catSorted[0]?.[1] || 0;
+
+  const biggest = [...rows].sort((a, b) => b.amount - a.amount)[0] || null;
+
+  const dailyMap = {};
+  rows.forEach(r => { dailyMap[r.dateStr] = (dailyMap[r.dateStr] || 0) + r.amount; });
+  const busiestEntry = Object.entries(dailyMap).sort((a, b) => b[1] - a[1])[0];
+  const busiestDay = busiestEntry?.[0] || null;
+  const busiestAmt = busiestEntry?.[1] || 0;
+
+  let weekdayTotal = 0, weekendTotal = 0;
+  rows.forEach(r => {
+    const dow = r.date.getDay();
+    if (dow === 0 || dow === 6) weekendTotal += r.amount;
+    else weekdayTotal += r.amount;
+  });
+  const weekdayPct = total > 0 ? Math.round(weekdayTotal / total * 100) : 0;
+  const weekendPct = total > 0 ? Math.round(weekendTotal / total * 100) : 0;
+
+  const daysInView = state.rangeMode ? diffDaysInclusive(state.rangeStart, state.rangeEnd) : getDaysElapsed();
+  const avgDaily = daysInView > 0 ? total / daysInView : 0;
+
+  return {
+    rows, total, avgDaily, daysInView, txnCount: rows.length,
+    topCat, topCatAmt, catTotals, catSorted,
+    biggest, busiestDay, busiestAmt, weekdayPct, weekendPct,
+  };
+}
+
 /* ── Render: Summary Cards ────────────────────────────────────────────────── */
-function renderSummaryCards(m) {
-  document.getElementById('val-total').textContent = fmt(m.total);
-  document.getElementById('sub-total').textContent = formatMonthLabel(state.selectedMonth);
+function renderSummaryCards(vm) {
+  document.getElementById('val-total').textContent = fmt(vm.total);
+  document.getElementById('sub-total').textContent = state.rangeMode
+    ? formatRangeLabel(state.rangeStart, state.rangeEnd)
+    : formatMonthLabel(state.selectedMonth);
 
-  document.getElementById('val-avg-daily').textContent = fmt(m.avgDaily);
+  document.getElementById('val-avg-daily').textContent = fmt(vm.avgDaily);
   document.getElementById('sub-avg-daily').textContent =
-    `Over ${m.daysElapsed} day${m.daysElapsed !== 1 ? 's' : ''}`;
+    `Over ${vm.daysInView} day${vm.daysInView !== 1 ? 's' : ''}`;
 
-  document.getElementById('val-txn-count').textContent = m.txnCount;
+  document.getElementById('val-txn-count').textContent = vm.txnCount;
   document.getElementById('sub-txn-count').textContent = 'transactions recorded';
 
-  document.getElementById('val-top-cat').textContent = m.topCat;
+  document.getElementById('val-top-cat').textContent = vm.topCat;
   document.getElementById('sub-top-cat').textContent =
-    m.topCatAmt > 0 ? fmt(m.topCatAmt) + ' spent' : '';
+    vm.topCatAmt > 0 ? fmt(vm.topCatAmt) + ' spent' : '';
 }
 
 /* ── Render: MoM Card ─────────────────────────────────────────────────────── */
@@ -361,13 +435,13 @@ function destroyChart(key) {
   if (state.charts[key]) { state.charts[key].destroy(); state.charts[key] = null; }
 }
 
-function renderDonutChart(m) {
+function renderDonutChart(vm) {
   destroyChart('donut');
-  if (!m.catSorted.length) return;
+  if (!vm.catSorted.length) return;
 
-  const labels = m.catSorted.map(([k]) => k);
-  const values = m.catSorted.map(([, v]) => v);
-  const total  = m.total;
+  const labels = vm.catSorted.map(([k]) => k);
+  const values = vm.catSorted.map(([, v]) => v);
+  const total  = vm.total;
   const colors = labels.map(getCatColor);
 
   state.charts.donut = new Chart(
@@ -613,16 +687,55 @@ function closeDayDetail() {
   document.getElementById('day-detail-panel').classList.add('hidden');
 }
 
+/* ── Custom Date Range Mode ───────────────────────────────────────────────── */
+function activateRangeMode(start, end, presetKey) {
+  state.rangeMode = true;
+  state.rangeStart = start;
+  state.rangeEnd = end;
+  state.rangePreset = presetKey;
+  state.currentPage = 1;
+  closeDayDetail();
+  syncRangeControlsUI();
+  renderAll();
+}
+
+function deactivateRangeMode() {
+  state.rangeMode = false;
+  state.rangePreset = null;
+  state.currentPage = 1;
+  syncRangeControlsUI();
+  renderAll();
+}
+
+function syncRangeControlsUI() {
+  document.querySelectorAll('#range-presets .chip-btn').forEach(btn => {
+    btn.classList.toggle('active', state.rangeMode && btn.dataset.preset === state.rangePreset);
+  });
+  document.getElementById('range-clear-btn').classList.toggle('hidden', !state.rangeMode);
+  document.getElementById('month-filter').disabled = state.rangeMode;
+  document.getElementById('date-filter-bar').classList.toggle('is-active', state.rangeMode);
+  if (state.rangeStart) document.getElementById('range-start').value = toDateInputValue(state.rangeStart);
+  if (state.rangeEnd)   document.getElementById('range-end').value   = toDateInputValue(state.rangeEnd);
+}
+
+function updateRangeModeVisibility() {
+  const showMonthSections = !state.rangeMode;
+  document.getElementById('card-mom').classList.toggle('hidden', !showMonthSections);
+  document.querySelector('.two-col-row').classList.toggle('is-range-mode', !showMonthSections);
+  document.getElementById('calendar-card').classList.toggle('hidden', !showMonthSections);
+  document.getElementById('insight-pace').classList.toggle('hidden', !showMonthSections);
+  document.getElementById('insights-strip').classList.toggle('pace-hidden', !showMonthSections);
+}
+
 /* ── Render: Category Table ───────────────────────────────────────────────── */
-function renderCategoryTable(m) {
+function renderCategoryTable(vm) {
   const tbody = document.getElementById('cat-tbody');
   tbody.innerHTML = '';
-  const total = m.total;
-  const rows = getMonthRows();
+  const total = vm.total;
 
-  m.catSorted.forEach(([cat, amt]) => {
+  vm.catSorted.forEach(([cat, amt]) => {
     const pct = total > 0 ? (amt / total * 100).toFixed(1) : '0.0';
-    const count = rows.filter(r => r.category === cat).length;
+    const count = vm.rows.filter(r => r.category === cat).length;
     const color = getCatColor(cat);
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -634,46 +747,46 @@ function renderCategoryTable(m) {
     tbody.appendChild(tr);
   });
 
-  if (!m.catSorted.length) {
+  if (!vm.catSorted.length) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">No data for this month</td>';
+    tr.innerHTML = '<td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">No data for this selection</td>';
     tbody.appendChild(tr);
   }
 }
 
 /* ── Render: Insights ─────────────────────────────────────────────────────── */
-function renderInsights(m) {
-  // Spending pace
+function renderInsights(monthMetrics, vm) {
+  // Spending pace (month-relative only, hidden entirely in range mode)
   document.getElementById('iv-pace').innerHTML =
-    `On pace for <strong>${fmt(m.pace)}</strong> this month`;
+    `On pace for <strong>${fmt(monthMetrics.pace)}</strong> this month`;
 
   // Biggest expense
-  if (m.biggest) {
-    const desc = m.biggest.description || m.biggest.category;
+  if (vm.biggest) {
+    const desc = vm.biggest.description || vm.biggest.category;
     document.getElementById('iv-biggest').innerHTML =
-      `${desc} — <strong>${fmt(m.biggest.amount)}</strong>`;
+      `${desc} — <strong>${fmt(vm.biggest.amount)}</strong>`;
   } else {
     document.getElementById('iv-biggest').textContent = '—';
   }
 
   // Most expensive day
-  if (m.busiestDay) {
-    const d = parseFlexibleDate(m.busiestDay);
-    const label = d ? formatDisplayDate(d) : m.busiestDay;
+  if (vm.busiestDay) {
+    const d = parseFlexibleDate(vm.busiestDay);
+    const label = d ? formatDisplayDate(d) : vm.busiestDay;
     document.getElementById('iv-busiest').innerHTML =
-      `${label} — <strong>${fmt(m.busiestAmt)}</strong>`;
+      `${label} — <strong>${fmt(vm.busiestAmt)}</strong>`;
   } else {
     document.getElementById('iv-busiest').textContent = '—';
   }
 
   // Weekday vs weekend
   document.getElementById('iv-weekend').innerHTML =
-    `<strong>${m.weekdayPct}%</strong> weekday / <strong>${m.weekendPct}%</strong> weekend`;
+    `<strong>${vm.weekdayPct}%</strong> weekday / <strong>${vm.weekendPct}%</strong> weekend`;
 }
 
 /* ── Render: Transaction Table ────────────────────────────────────────────── */
 function renderTxnTable() {
-  let rows = getMonthRows();
+  let rows = getFilteredRows();
 
   // Sort
   rows = [...rows].sort((a, b) => {
@@ -696,8 +809,13 @@ function renderTxnTable() {
   tbody.innerHTML = '';
 
   if (!pageRows.length) {
+    const emptyMsg = state.searchQuery.trim()
+      ? 'No transactions match your search'
+      : state.rangeMode
+        ? 'No transactions in this date range'
+        : 'No transactions for this month';
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">No transactions for this month</td>';
+    tr.innerHTML = `<td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">${emptyMsg}</td>`;
     tbody.appendChild(tr);
   } else {
     pageRows.forEach(r => {
@@ -723,17 +841,27 @@ function renderTxnTable() {
 }
 
 /* ── Render All ───────────────────────────────────────────────────────────── */
+function renderViewSections(monthMetrics, viewMetrics) {
+  renderSummaryCards(viewMetrics);
+  renderDonutChart(viewMetrics);
+  renderCategoryTable(viewMetrics);
+  renderInsights(monthMetrics, viewMetrics);
+  renderTxnTable();
+}
+
 function renderAll() {
   if (!state.selectedMonth) return;
-  const m = computeMetrics();
-  renderSummaryCards(m);
-  renderMoMCard(m);
-  renderDonutChart(m);
-  renderMoMBarChart();
-  renderCalendar();
-  renderCategoryTable(m);
-  renderInsights(m);
-  renderTxnTable();
+  const monthMetrics = computeMetrics();
+  const viewMetrics = computeViewMetrics();
+
+  updateRangeModeVisibility();
+  renderViewSections(monthMetrics, viewMetrics);
+
+  if (!state.rangeMode) {
+    renderMoMCard(monthMetrics);
+    renderMoMBarChart();
+    renderCalendar();
+  }
 }
 
 /* ── UI Helpers ───────────────────────────────────────────────────────────── */
@@ -829,6 +957,12 @@ document.addEventListener('DOMContentLoaded', () => {
     hideSettingsModal();
     state.allRows = [];
     state.selectedMonth = null;
+    state.rangeMode = false;
+    state.rangeStart = null;
+    state.rangeEnd = null;
+    state.rangePreset = null;
+    state.searchQuery = '';
+    document.getElementById('txn-search-input').value = '';
     loadData();
   });
 
@@ -851,6 +985,46 @@ document.addEventListener('DOMContentLoaded', () => {
     closeDayDetail();
     renderAll();
   });
+
+  /* ── Transaction search ── */
+  document.getElementById('txn-search-input').addEventListener('input', e => {
+    state.searchQuery = e.target.value;
+    state.currentPage = 1;
+    renderViewSections(computeMetrics(), computeViewMetrics());
+  });
+
+  /* ── Date range: presets ── */
+  document.querySelectorAll('#range-presets .chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const days = parseInt(btn.dataset.preset, 10);
+      const end = new Date(); end.setHours(0, 0, 0, 0);
+      const start = new Date(end); start.setDate(start.getDate() - (days - 1));
+      document.getElementById('range-error').classList.add('hidden');
+      activateRangeMode(start, end, btn.dataset.preset);
+    });
+  });
+
+  /* ── Date range: manual apply ── */
+  document.getElementById('range-apply-btn').addEventListener('click', () => {
+    const startVal = document.getElementById('range-start').value;
+    const endVal   = document.getElementById('range-end').value;
+    const errEl    = document.getElementById('range-error');
+    const start = startVal ? new Date(startVal + 'T00:00:00') : null;
+    const end   = endVal   ? new Date(endVal   + 'T00:00:00') : null;
+
+    if (!start || !end || isNaN(start) || isNaN(end) || start > end) {
+      errEl.textContent = !start || !end
+        ? 'Please select both a start and end date.'
+        : 'Start date must be on or before end date.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    errEl.classList.add('hidden');
+    activateRangeMode(start, end, 'custom');
+  });
+
+  /* ── Date range: back to month view ── */
+  document.getElementById('range-clear-btn').addEventListener('click', deactivateRangeMode);
 
   /* ── Day detail close ── */
   document.getElementById('dd-close-btn').addEventListener('click', closeDayDetail);

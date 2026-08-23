@@ -192,6 +192,84 @@ body {
   box-shadow: var(--glow-sm);
 }
 
+/* ── Date Range Filter Bar ───────────────────────────────────────────────── */
+.date-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+}
+.date-filter-bar.is-active {
+  border-color: var(--border-bright);
+  box-shadow: var(--shadow-card), 0 0 0 1px rgba(70,184,212,0.15);
+}
+
+.range-presets { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.chip-btn {
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.chip-btn:hover { border-color: var(--border-mid); color: var(--text-primary); }
+.chip-btn.active {
+  border-color: var(--accent-cyan);
+  background: rgba(0,200,255,0.12);
+  color: var(--accent-cyan);
+}
+
+.date-filter-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.date-filter-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.date-input {
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 0.82rem;
+  outline: none;
+  transition: var(--transition);
+  color-scheme: dark;
+}
+.date-input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(0,200,255,0.15), var(--glow-sm);
+}
+
+.btn-sm { padding: 0.4rem 0.9rem; font-size: 0.78rem; }
+#range-clear-btn { margin-left: auto; }
+#range-error { flex-basis: 100%; margin-top: 0; }
+
+/* ── Range mode layout ───────────────────────────────────────────────────── */
+.two-col-row.is-range-mode { grid-template-columns: 1fr; }
+.two-col-row.is-range-mode .bar-chart-card { display: none; }
+.month-select:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Insights strip: 3-item layout when Spending Pace is hidden (range mode) */
+.insights-strip.pace-hidden { grid-template-columns: repeat(3, 1fr); }
+.insights-strip.pace-hidden #insight-biggest { border-right: 1px solid var(--border); }
+.insights-strip.pace-hidden #insight-weekend { border-right: none; }
+
 /* ── Error Banner ─────────────────────────────────────────────────────────── */
 .error-banner {
   display: flex;
@@ -322,7 +400,7 @@ body {
 .chart-card { display: flex; flex-direction: column; }
 
 .chart-wrapper {
-  flex: 1;
+  flex: 0 0 auto;
   position: relative;
   height: 280px;
 }
@@ -435,6 +513,28 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+
+/* ── Transaction Search ──────────────────────────────────────────────────── */
+.table-toolbar { display: flex; margin-bottom: 1rem; }
+
+.search-input {
+  width: 100%;
+  max-width: 320px;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-mid);
+  background: rgba(0,12,30,0.6);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-family: var(--font);
+  outline: none;
+  transition: var(--transition);
+}
+.search-input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(0,200,255,0.15), var(--glow-sm);
+}
+.search-input::placeholder { color: var(--text-muted); }
 
 .amount-cell {
   font-variant-numeric: tabular-nums;
@@ -811,6 +911,18 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   .insight-item:nth-child(4) { border-top: 1px solid var(--border); border-right: none; }
   .month-select, .btn-primary, .btn-secondary, .page-btn { min-height: 44px; }
   .icon-btn { width: 44px; height: 44px; }
+
+  .date-filter-bar { padding: 0.75rem 1rem; }
+  .date-input, .btn-primary.btn-sm, .btn-secondary.btn-sm { min-height: 40px; }
+
+  .insights-strip.pace-hidden { grid-template-columns: repeat(2, 1fr); }
+  .insights-strip.pace-hidden #insight-biggest { border-right: 1px solid var(--border); }
+  .insights-strip.pace-hidden #insight-busiest-day { border-right: none; }
+  .insights-strip.pace-hidden #insight-weekend {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    border-right: none;
+  }
 }
 
 /* Mobile */
@@ -858,6 +970,13 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   .cal-cat-dots { display: none; }
   .cal-date-num { font-size: 0.68rem; }
   .calendar-hint { display: none; }
+
+  /* Date filter bar + search: stack full-width */
+  .date-filter-bar { flex-direction: column; align-items: stretch; }
+  .range-presets, .date-filter-custom { width: 100%; }
+  .date-input { flex: 1; min-width: 0; }
+  #range-clear-btn { margin-left: 0; width: 100%; }
+  .search-input { max-width: none; }
 }
 
 /* Very small phones */

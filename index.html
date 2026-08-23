@@ -75,6 +75,24 @@
       <button id="retry-btn" class="retry-btn">Retry</button>
     </div>
 
+    <!-- Date Range Filter Bar -->
+    <section class="card date-filter-bar" id="date-filter-bar" aria-label="Date range filter">
+      <div class="range-presets" id="range-presets">
+        <button class="chip-btn" data-preset="7">Last 7 days</button>
+        <button class="chip-btn" data-preset="30">Last 30 days</button>
+        <button class="chip-btn" data-preset="90">Last 90 days</button>
+      </div>
+      <div class="date-filter-custom">
+        <label class="date-filter-label" for="range-start">From</label>
+        <input type="date" id="range-start" class="date-input" />
+        <label class="date-filter-label" for="range-end">To</label>
+        <input type="date" id="range-end" class="date-input" />
+        <button id="range-apply-btn" class="btn-primary btn-sm">Apply</button>
+      </div>
+      <button id="range-clear-btn" class="btn-secondary btn-sm hidden">Back to month view</button>
+      <p id="range-error" class="input-error hidden"></p>
+    </section>
+
     <!-- Row 1: Summary Cards -->
     <section class="summary-row" aria-label="Summary">
       <div class="card summary-card" id="card-total">
@@ -117,7 +135,7 @@
           <canvas id="chart-donut" aria-label="Category breakdown donut chart"></canvas>
         </div>
       </div>
-      <div class="card chart-card">
+      <div class="card chart-card bar-chart-card">
         <h2 class="card-heading">Monthly Overview</h2>
         <div class="chart-wrapper">
           <canvas id="chart-bar-mom" aria-label="Month over month bar chart"></canvas>
@@ -126,7 +144,7 @@
     </section>
 
     <!-- Row 3: Daily Spending Calendar -->
-    <section class="card calendar-card" aria-label="Daily spending calendar">
+    <section class="card calendar-card" id="calendar-card" aria-label="Daily spending calendar">
       <div class="calendar-title-row">
         <h2 class="card-heading no-margin">Daily Spending</h2>
         <span class="calendar-hint">Tap a day to see details</span>
@@ -181,7 +199,7 @@
     </div>
 
     <!-- Row 4: Insights Strip -->
-    <section class="card insights-strip" aria-label="Spending insights">
+    <section class="card insights-strip" id="insights-strip" aria-label="Spending insights">
       <div class="insight-item" id="insight-pace">
         <span class="insight-label">Spending Pace</span>
         <span class="insight-value" id="iv-pace">—</span>
@@ -205,6 +223,11 @@
       <div class="table-header-row">
         <h2 class="card-heading no-margin">Transactions</h2>
         <span class="txn-count-label" id="txn-range-label"></span>
+      </div>
+      <div class="table-toolbar">
+        <input id="txn-search-input" class="search-input" type="search"
+               placeholder="Search description or category…" autocomplete="off"
+               aria-label="Search transactions" />
       </div>
       <div class="table-responsive">
         <table id="txn-table" aria-label="Transaction list">
