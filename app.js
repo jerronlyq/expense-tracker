@@ -3,6 +3,7 @@ const DEFAULT_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQukvlfbVuwS7R1PizzrfK6kiK6A7ZmEywq4lBxQmjOD0sASVlJOfxVJXL1BO_eqLze6vGfL5yBm3dw/pub?gid=0&single=true&output=csv';
 
 const STORAGE_KEY = 'expense_tracker_sheet_url';
+const THEME_STORAGE_KEY = 'expense_tracker_theme';
 const ROWS_PER_PAGE = 20;
 
 const CATEGORY_COLORS = {
@@ -78,6 +79,39 @@ function toDateInputValue(d) {
 
 function getCatColor(cat) {
   return CATEGORY_COLORS[cat] || '#94a3b8';
+}
+
+/* ── Theme ─────────────────────────────────────────────────────────────────── */
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function getEffectiveTheme() {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'light' || stored === 'dark') return stored;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches)
+    ? 'light' : 'dark';
+}
+
+function applyChartDefaults() {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  Chart.defaults.color = cssVar('--text-secondary');
+}
+
+function updateThemeToggleIcon() {
+  const isLight = getEffectiveTheme() === 'light';
+  document.getElementById('theme-icon-sun').classList.toggle('hidden', isLight);
+  document.getElementById('theme-icon-moon').classList.toggle('hidden', !isLight);
+}
+
+function toggleTheme() {
+  const next = getEffectiveTheme() === 'light' ? 'dark' : 'light';
+  localStorage.setItem(THEME_STORAGE_KEY, next);
+  document.documentElement.setAttribute('data-theme', next);
+  updateThemeToggleIcon();
+  applyChartDefaults();
+  if (state.allRows.length) renderAll();
 }
 
 function getDaysElapsed() {
@@ -453,7 +487,7 @@ function renderDonutChart(vm) {
           data: values,
           backgroundColor: colors,
           borderWidth: 2,
-          borderColor: '#050c1c',
+          borderColor: cssVar('--chart-segment-gap'),
           hoverOffset: 6,
         }],
       },
@@ -522,7 +556,7 @@ function renderMoMBarChart() {
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 11 } } },
           y: {
-            grid: { color: 'rgba(255,255,255,0.06)' },
+            grid: { color: cssVar('--chart-grid-line') },
             ticks: {
               font: { size: 11 },
               callback: v => `S$${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`,
@@ -908,10 +942,20 @@ function isValidUrl(str) {
 
 /* ── Init & Event Wiring ──────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  // Chart.js global defaults
-  if (typeof Chart !== 'undefined') {
-    Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    Chart.defaults.color = '#8ab0cc';
+  applyChartDefaults();
+  updateThemeToggleIcon();
+
+  document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
+
+  // Keep in sync with live OS theme changes when the user hasn't made an explicit choice
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+      if (!localStorage.getItem(THEME_STORAGE_KEY)) {
+        updateThemeToggleIcon();
+        applyChartDefaults();
+        if (state.allRows.length) renderAll();
+      }
+    });
   }
 
   // Show setup modal if no URL stored, otherwise go straight to data load

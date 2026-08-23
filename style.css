@@ -35,6 +35,10 @@
   --radius-sm:     8px;
   --transition:    all 0.18s ease;
 
+  /* Chart.js-read colours (set dynamically from JS via getComputedStyle) */
+  --chart-segment-gap: #050c1c;
+  --chart-grid-line:   rgba(255,255,255,0.06);
+
   /* Category colours — vivid/neon for dark glass backgrounds */
   --col-food:          #ff6b35;
   --col-transport:     #00aaff;
@@ -49,6 +53,97 @@
   --col-others:        #4a6880;
 
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Light Theme ──────────────────────────────────────────────────────────
+   Dark is the default (bare :root above). Light applies either when the OS
+   prefers light and the user hasn't explicitly forced dark (media-query
+   block), or when the user has explicitly chosen light via the toggle
+   (data-theme block, takes precedence either direction). Keep both blocks
+   in sync — same values, different guard. */
+:root[data-theme="light"] {
+  --bg:            #eef4fa;
+  --bg-card:       rgba(255, 255, 255, 0.82);
+  --bg-elevated:   rgba(255, 255, 255, 0.95);
+
+  --border:        rgba(40, 80, 120, 0.1);
+  --border-mid:    rgba(40, 80, 120, 0.2);
+  --border-bright: rgba(20, 120, 160, 0.45);
+
+  --text-primary:  #0f1f2e;
+  --text-secondary:#445f76;
+  --text-muted:    #76909f;
+
+  --accent-cyan:   #0891b2;
+  --accent-blue:   #2563eb;
+  --accent-green:  #059669;
+  --accent-red:    #dc2626;
+  --accent-orange: #c2410c;
+  --accent-violet: #7c3aed;
+
+  --glow-cyan:     rgba(8, 145, 178, 0.1);
+  --glow-sm:       0 0 10px rgba(8, 145, 178, 0.08);
+  --shadow-card:   0 2px 16px rgba(15,35,60,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+  --shadow-hover:  0 4px 28px rgba(15,35,60,0.12), 0 0 18px var(--glow-cyan);
+
+  --chart-segment-gap: #ffffff;
+  --chart-grid-line:   rgba(15,35,60,0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:            #eef4fa;
+    --bg-card:       rgba(255, 255, 255, 0.82);
+    --bg-elevated:   rgba(255, 255, 255, 0.95);
+
+    --border:        rgba(40, 80, 120, 0.1);
+    --border-mid:    rgba(40, 80, 120, 0.2);
+    --border-bright: rgba(20, 120, 160, 0.45);
+
+    --text-primary:  #0f1f2e;
+    --text-secondary:#445f76;
+    --text-muted:    #76909f;
+
+    --accent-cyan:   #0891b2;
+    --accent-blue:   #2563eb;
+    --accent-green:  #059669;
+    --accent-red:    #dc2626;
+    --accent-orange: #c2410c;
+    --accent-violet: #7c3aed;
+
+    --glow-cyan:     rgba(8, 145, 178, 0.1);
+    --glow-sm:       0 0 10px rgba(8, 145, 178, 0.08);
+    --shadow-card:   0 2px 16px rgba(15,35,60,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+    --shadow-hover:  0 4px 28px rgba(15,35,60,0.12), 0 0 18px var(--glow-cyan);
+
+    --chart-segment-gap: #ffffff;
+    --chart-grid-line:   rgba(15,35,60,0.08);
+  }
+}
+
+/* Component overrides that can't be expressed as a token swap alone */
+:root[data-theme="light"] .app-title,
+:root[data-theme="light"] .modal-title {
+  background: linear-gradient(120deg, var(--text-primary) 0%, var(--accent-blue) 55%, var(--accent-cyan) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+:root[data-theme="light"] .month-select option { background: #ffffff; }
+:root[data-theme="light"] .error-banner,
+:root[data-theme="light"] .retry-btn { color: #b91c3c; }
+:root[data-theme="light"] .cat-badge { color: color-mix(in srgb, var(--cat-color, #4a6880) 70%, black); }
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .app-title,
+  :root:not([data-theme="dark"]) .modal-title {
+    background: linear-gradient(120deg, var(--text-primary) 0%, var(--accent-blue) 55%, var(--accent-cyan) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  :root:not([data-theme="dark"]) .month-select option { background: #ffffff; }
+  :root:not([data-theme="dark"]) .error-banner,
+  :root:not([data-theme="dark"]) .retry-btn { color: #b91c3c; }
+  :root:not([data-theme="dark"]) .cat-badge { color: color-mix(in srgb, var(--cat-color, #4a6880) 70%, black); }
 }
 
 html { font-size: 16px; }
@@ -334,7 +429,7 @@ body {
 .card-value {
   font-size: 1.85rem;
   font-weight: 700;
-  color: #eaf3fb;
+  color: var(--text-primary);
   line-height: 1.1;
   letter-spacing: -0.02em;
 }
@@ -523,7 +618,7 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   padding: 0.5rem 0.85rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-mid);
-  background: rgba(0,12,30,0.6);
+  background: var(--bg-elevated);
   color: var(--text-primary);
   font-size: 0.85rem;
   font-family: var(--font);
@@ -684,7 +779,7 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   color: var(--text-primary);
   outline: none;
   transition: var(--transition);
-  background: rgba(0,12,30,0.6);
+  background: var(--bg-elevated);
 }
 .url-input:focus {
   border-color: var(--accent-cyan);
@@ -832,6 +927,8 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   color: var(--accent-cyan);
   margin-top: auto;
   line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .cal-cat-dots {
@@ -854,7 +951,7 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
 .cal-cell--heat-high   { background: rgba(70,184,212,0.2);  border-color: rgba(70,184,212,0.26); }
 .cal-cell--heat-max    { background: rgba(70,184,212,0.28); border-color: rgba(70,184,212,0.35); }
 .cal-cell--heat-max .cal-date-num { color: var(--text-secondary); }
-.cal-cell--heat-max .cal-amount   { color: #e8f6ff; }
+.cal-cell--heat-max .cal-amount   { color: var(--text-primary); }
 
 /* ── Day Detail Panel ────────────────────────────────────────────────────── */
 .day-detail-panel {
