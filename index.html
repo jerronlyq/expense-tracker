@@ -51,6 +51,9 @@
       <label class="input-label" for="settings-url-input">Google Sheets CSV URL</label>
       <input id="settings-url-input" class="url-input" type="url" />
       <p id="settings-error" class="input-error hidden">Please enter a valid URL.</p>
+      <label class="input-label" for="settings-fixed-url-input">Fixed Expenses Sheet CSV URL (optional)</label>
+      <input id="settings-fixed-url-input" class="url-input" type="url" placeholder="Leave blank if not set up yet" />
+      <p id="settings-fixed-error" class="input-error hidden">Please enter a valid URL.</p>
       <div class="modal-actions">
         <button id="settings-cancel-btn" class="btn-secondary">Cancel</button>
         <button id="settings-save-btn" class="btn-primary">Save &amp; Reload</button>
@@ -93,11 +96,19 @@
       </div>
     </header>
 
+    <!-- Tab switcher -->
+    <nav class="tab-switcher card" aria-label="Dashboard view">
+      <button class="tab-btn active" id="tab-btn-variable" data-tab="variable">Variable Expenses</button>
+      <button class="tab-btn" id="tab-btn-fixed" data-tab="fixed">Fixed Expenses</button>
+    </nav>
+
     <!-- Error banner -->
     <div id="error-banner" class="error-banner hidden">
       <span id="error-text"></span>
       <button id="retry-btn" class="retry-btn">Retry</button>
     </div>
+
+    <div id="tab-panel-variable" class="tab-panel">
 
     <!-- Date Range Filter Bar -->
     <section class="card date-filter-bar" id="date-filter-bar" aria-label="Date range filter">
@@ -272,6 +283,70 @@
         <button id="btn-next" class="page-btn" disabled>Next &#8594;</button>
       </div>
     </section>
+
+    </div><!-- #tab-panel-variable -->
+
+    <div id="tab-panel-fixed" class="tab-panel hidden">
+
+      <div id="fixed-not-configured" class="card fixed-empty-state hidden">
+        <h2 class="card-heading no-margin">Fixed Expenses not set up yet</h2>
+        <p class="modal-desc">Create a tab in your Google Sheet with columns <code>Category, Description, Amount, Start Date, End Date</code> — one row per fixed expense, only edited when something starts, changes price, or gets cancelled. Publish it to the web as CSV (File → Share → Publish to web, select that tab), then paste the link in Settings.</p>
+        <button id="fixed-setup-settings-btn" class="btn-primary">Open Settings</button>
+      </div>
+
+      <div id="fixed-load-error" class="error-banner hidden">
+        <span>Could not load your Fixed Expenses sheet. Check the URL in Settings and try again.</span>
+      </div>
+
+      <div id="fixed-content" class="hidden">
+
+        <section class="summary-row cols-3" aria-label="Fixed expenses summary">
+          <div class="card summary-card" id="card-fixed-total">
+            <span class="card-label">Total Fixed This Month</span>
+            <span class="card-value" id="val-fixed-total">—</span>
+            <span class="card-sub" id="sub-fixed-total"></span>
+          </div>
+          <div class="card summary-card" id="card-fixed-active">
+            <span class="card-label">Active This Month</span>
+            <span class="card-value" id="val-fixed-active">—</span>
+            <span class="card-sub">fixed items</span>
+          </div>
+          <div class="card summary-card" id="card-fixed-discontinued">
+            <span class="card-label">Discontinued</span>
+            <span class="card-value" id="val-fixed-discontinued">—</span>
+            <span class="card-sub">ended before this month</span>
+          </div>
+        </section>
+
+        <div class="card chart-card">
+          <h2 class="card-heading">Fixed Expenses Overview</h2>
+          <div class="chart-wrapper">
+            <canvas id="chart-bar-fixed" aria-label="Fixed expenses month over month bar chart"></canvas>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <h2 class="card-heading">Fixed Expenses Schedule</h2>
+          <div class="table-responsive">
+            <table id="fixed-table" aria-label="Fixed expenses schedule">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Category</th>
+                  <th class="text-right">Amount</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="fixed-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- #fixed-content -->
+
+    </div><!-- #tab-panel-fixed -->
 
   </div><!-- .app-container -->
 

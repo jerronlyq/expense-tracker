@@ -221,6 +221,35 @@ body {
   gap: 0.875rem;
 }
 
+/* ── Tab Switcher ────────────────────────────────────────────────────────── */
+.tab-switcher {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  letter-spacing: 0.02em;
+}
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active {
+  background: var(--bg-elevated);
+  border-color: var(--border-mid);
+  color: var(--accent-cyan);
+  box-shadow: var(--glow-sm);
+}
+
 /* Gradient title text */
 .app-title {
   font-size: 1.2rem;
@@ -397,6 +426,7 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
 }
+.summary-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
 
 .summary-card {
   display: flex;
@@ -507,6 +537,23 @@ body {
 /* ── Category Breakdown Table ────────────────────────────────────────────── */
 .table-card { display: flex; flex-direction: column; }
 
+/* ── Fixed Expenses Empty State ──────────────────────────────────────────── */
+.fixed-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.fixed-empty-state .modal-desc code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.82em;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  color: var(--accent-cyan);
+}
+
 /* ── Table Shared Styles ─────────────────────────────────────────────────── */
 .table-responsive { overflow-x: auto; }
 
@@ -561,6 +608,26 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   color: var(--cat-color, #4a6880);
   background: color-mix(in srgb, var(--cat-color, #4a6880) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--cat-color, #4a6880) 35%, transparent);
+}
+
+/* ── Status Badge (Fixed Expenses tab) ──────────────────────────────────── */
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status-badge--active {
+  color: var(--accent-green);
+  background: color-mix(in srgb, var(--accent-green) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-green) 35%, transparent);
+}
+.status-badge--discontinued {
+  color: var(--accent-orange);
+  background: color-mix(in srgb, var(--accent-orange) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-orange) 35%, transparent);
 }
 
 /* ── Insights Strip ─────────────────────────────────────────────────────── */
@@ -994,7 +1061,7 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
 
 /* Tablet landscape */
 @media (max-width: 1100px) {
-  .summary-row { grid-template-columns: repeat(2, 1fr); }
+  .summary-row, .summary-row.cols-3 { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Tablet portrait */
@@ -1031,7 +1098,9 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
   .month-select { flex: 1; min-height: 44px; font-size: 1rem; }
   .icon-btn { width: 44px; height: 44px; flex-shrink: 0; }
 
-  .summary-row { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+  .tab-btn { font-size: 0.72rem; padding: 0.6rem 0.5rem; min-height: 44px; letter-spacing: 0; }
+
+  .summary-row, .summary-row.cols-3 { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
   .card { padding: 1rem; }
   .card-value { font-size: 1.35rem; }
 
@@ -1078,6 +1147,6 @@ th.sortable.sort-desc .sort-icon::after { content: ' ↓'; color: var(--accent-c
 
 /* Very small phones */
 @media (max-width: 380px) {
-  .summary-row { grid-template-columns: 1fr; }
+  .summary-row, .summary-row.cols-3 { grid-template-columns: 1fr; }
   .card-value { font-size: 1.55rem; }
 }

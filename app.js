@@ -3,6 +3,7 @@ const DEFAULT_SHEET_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vQukvlfbVuwS7R1PizzrfK6kiK6A7ZmEywq4lBxQmjOD0sASVlJOfxVJXL1BO_eqLze6vGfL5yBm3dw/pub?gid=0&single=true&output=csv';
 
 const STORAGE_KEY = 'expense_tracker_sheet_url';
+const FIXED_SHEET_STORAGE_KEY = 'expense_tracker_fixed_sheet_url';
 const THEME_STORAGE_KEY = 'expense_tracker_theme';
 const ROWS_PER_PAGE = 20;
 
@@ -38,6 +39,7 @@ const state = {
   charts: {
     donut:  null,
     barMom: null,
+    barFixed: null,
   },
 
   searchQuery: '',
@@ -45,6 +47,10 @@ const state = {
   rangeStart:  null,
   rangeEnd:    null,
   rangePreset: null,
+
+  activeTab:      'variable',
+  fixedSchedule:  [],
+  fixedLoadError: false,
 };
 
 /* ── Utilities ─────────────────────────────────────────────────────────────── */
@@ -194,6 +200,60 @@ function parseCSV(text) {
   return rows.sort((a, b) => a.date - b.date);
 }
 
+function parseFixedCSV(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const headers = splitCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+  const rows = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const vals = splitCSVLine(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (vals[idx] || '').trim(); });
+
+    const amount = parseFloat((obj.amount || '').replace(/[^0-9.-]/g, ''));
+    const startRaw = obj['start date'] || '';
+    if (!startRaw || !amount || isNaN(amount) || amount <= 0) continue;
+
+    const startDate = parseFlexibleDate(startRaw);
+    if (!startDate || isNaN(startDate)) continue;
+
+    const endRaw = obj['end date'] || '';
+    const parsedEnd = endRaw ? parseFlexibleDate(endRaw) : null;
+    const endDate = (parsedEnd && !isNaN(parsedEnd)) ? parsedEnd : null;
+
+    rows.push({
+      category:    obj.category || 'Others',
+      description: obj.description || '',
+      amount,
+      startDate,
+      endDate,
+    });
+  }
+
+  return rows.sort((a, b) => b.startDate - a.startDate);
+}
+
+function isFixedRowActiveInMonth(row, monthKey) {
+  if (toYYYYMM(row.startDate) > monthKey) return false;
+  if (row.endDate && toYYYYMM(row.endDate) < monthKey) return false;
+  return true;
+}
+
+function getActiveFixedRows(monthKey) {
+  return state.fixedSchedule.filter(r => isFixedRowActiveInMonth(r, monthKey));
+}
+
+function computeFixedMetrics(monthKey) {
+  const activeRows = getActiveFixedRows(monthKey);
+  const total = activeRows.reduce((s, r) => s + r.amount, 0);
+  const discontinuedCount = state.fixedSchedule.filter(r =>
+    r.endDate && toYYYYMM(r.endDate) < monthKey
+  ).length;
+  return { total, activeCount: activeRows.length, discontinuedCount, activeRows };
+}
+
 /* ── Fetch with CORS proxy waterfall ──────────────────────────────────────── */
 async function fetchWithTimeout(url, ms) {
   const controller = new AbortController();
@@ -252,6 +312,44 @@ async function loadData() {
 
   populateMonthFilter();
   renderAll();
+
+  loadFixedData();
+}
+
+async function loadFixedData() {
+  const fixedSheetUrl = localStorage.getItem(FIXED_SHEET_STORAGE_KEY);
+  if (!fixedSheetUrl) {
+    state.fixedSchedule = [];
+    state.fixedLoadError = false;
+    renderFixedTab();
+    return;
+  }
+
+  const url = fixedSheetUrl + '&t=' + Date.now();
+  let res = await fetchWithTimeout(url, 6000);
+  if (!res) {
+    for (const proxyFn of CORS_PROXIES) {
+      res = await fetchWithTimeout(proxyFn(url), 7000);
+      if (res) break;
+    }
+  }
+
+  if (!res) {
+    state.fixedSchedule = [];
+    state.fixedLoadError = true;
+    renderFixedTab();
+    return;
+  }
+
+  try {
+    const csvText = await res.text();
+    state.fixedSchedule = parseFixedCSV(csvText);
+    state.fixedLoadError = false;
+  } catch {
+    state.fixedSchedule = [];
+    state.fixedLoadError = true;
+  }
+  renderFixedTab();
 }
 
 /* ── Month Filter ─────────────────────────────────────────────────────────── */
@@ -896,6 +994,117 @@ function renderAll() {
     renderMoMBarChart();
     renderCalendar();
   }
+
+  renderFixedTab();
+}
+
+/* ── Render: Fixed Expenses Tab ───────────────────────────────────────────── */
+function renderFixedBarChart() {
+  destroyChart('barFixed');
+  const months = getLastNMonths(6);
+  const labels = months.map(formatMonthLabel);
+  const totals = months.map(mo => getActiveFixedRows(mo).reduce((s, r) => s + r.amount, 0));
+  const colors = months.map(mo =>
+    mo === state.selectedMonth ? 'rgba(70,184,212,0.6)' : 'rgba(70,184,212,0.15)'
+  );
+  const borderColors = months.map(mo =>
+    mo === state.selectedMonth ? 'rgba(70,184,212,0.9)' : 'rgba(70,184,212,0.35)'
+  );
+
+  state.charts.barFixed = new Chart(
+    document.getElementById('chart-bar-fixed').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: totals,
+          backgroundColor: colors,
+          borderColor: borderColors,
+          borderWidth: 1.5,
+          borderRadius: 6,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` Total: ${fmt(ctx.raw)}`,
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: {
+            grid: { color: cssVar('--chart-grid-line') },
+            ticks: {
+              font: { size: 11 },
+              callback: v => `S$${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`,
+            },
+          },
+        },
+      },
+    }
+  );
+}
+
+function renderFixedTab() {
+  if (!state.selectedMonth) return;
+
+  const configured = !!localStorage.getItem(FIXED_SHEET_STORAGE_KEY);
+  document.getElementById('fixed-not-configured').classList.toggle('hidden', configured);
+  document.getElementById('fixed-load-error').classList.toggle('hidden', !(configured && state.fixedLoadError));
+  document.getElementById('fixed-content').classList.toggle('hidden', !configured || state.fixedLoadError);
+
+  if (!configured || state.fixedLoadError) return;
+
+  const fm = computeFixedMetrics(state.selectedMonth);
+  document.getElementById('val-fixed-total').textContent = fmt(fm.total);
+  document.getElementById('sub-fixed-total').textContent = formatMonthLabel(state.selectedMonth);
+  document.getElementById('val-fixed-active').textContent = fm.activeCount;
+  document.getElementById('val-fixed-discontinued').textContent = fm.discontinuedCount;
+
+  renderFixedBarChart();
+
+  const tbody = document.getElementById('fixed-tbody');
+  tbody.innerHTML = '';
+
+  if (!state.fixedSchedule.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem">No fixed expenses recorded yet.</td>';
+    tbody.appendChild(tr);
+    return;
+  }
+
+  state.fixedSchedule.forEach(r => {
+    const catColor = getCatColor(r.category);
+    const isOngoing = !r.endDate;
+    const statusClass = isOngoing ? 'active' : 'discontinued';
+    const statusLabel = isOngoing ? 'Ongoing' : 'Ended';
+    const endLabel = r.endDate ? formatDisplayDate(r.endDate) : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.description}</td>
+      <td><span class="cat-badge" style="--cat-color:${catColor}">${r.category}</span></td>
+      <td class="text-right amount-cell">${fmt(r.amount)}</td>
+      <td style="white-space:nowrap">${formatDisplayDate(r.startDate)}</td>
+      <td style="white-space:nowrap">${endLabel}</td>
+      <td><span class="status-badge status-badge--${statusClass}">${statusLabel}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ── Tab Switching ─────────────────────────────────────────────────────────── */
+function switchTab(tab) {
+  state.activeTab = tab;
+  document.getElementById('tab-btn-variable').classList.toggle('active', tab === 'variable');
+  document.getElementById('tab-btn-fixed').classList.toggle('active', tab === 'fixed');
+  document.getElementById('tab-panel-variable').classList.toggle('hidden', tab !== 'variable');
+  document.getElementById('tab-panel-fixed').classList.toggle('hidden', tab !== 'fixed');
 }
 
 /* ── UI Helpers ───────────────────────────────────────────────────────────── */
@@ -927,8 +1136,10 @@ function hideSetupModal() {
 function showSettingsModal() {
   const stored = localStorage.getItem(STORAGE_KEY) || DEFAULT_SHEET_URL;
   document.getElementById('settings-url-input').value = stored;
+  document.getElementById('settings-fixed-url-input').value = localStorage.getItem(FIXED_SHEET_STORAGE_KEY) || '';
   document.getElementById('settings-modal').classList.remove('hidden');
   document.getElementById('settings-error').classList.add('hidden');
+  document.getElementById('settings-fixed-error').classList.add('hidden');
 }
 
 function hideSettingsModal() {
@@ -946,6 +1157,12 @@ document.addEventListener('DOMContentLoaded', () => {
   updateThemeToggleIcon();
 
   document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
+
+  /* ── Tab switcher ── */
+  document.getElementById('tab-btn-variable').addEventListener('click', () => switchTab('variable'));
+  document.getElementById('tab-btn-fixed').addEventListener('click', () => switchTab('fixed'));
+
+  document.getElementById('fixed-setup-settings-btn').addEventListener('click', showSettingsModal);
 
   // Keep in sync with live OS theme changes when the user hasn't made an explicit choice
   if (window.matchMedia) {
@@ -992,14 +1209,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('settings-save-btn').addEventListener('click', () => {
     const val = document.getElementById('settings-url-input').value.trim();
+    const fixedVal = document.getElementById('settings-fixed-url-input').value.trim();
+
     if (!isValidUrl(val)) {
       document.getElementById('settings-error').classList.remove('hidden');
       return;
     }
+    if (fixedVal && !isValidUrl(fixedVal)) {
+      document.getElementById('settings-fixed-error').classList.remove('hidden');
+      return;
+    }
     document.getElementById('settings-error').classList.add('hidden');
+    document.getElementById('settings-fixed-error').classList.add('hidden');
+
     localStorage.setItem(STORAGE_KEY, val);
+    if (fixedVal) localStorage.setItem(FIXED_SHEET_STORAGE_KEY, fixedVal);
+    else localStorage.removeItem(FIXED_SHEET_STORAGE_KEY);
+
     hideSettingsModal();
     state.allRows = [];
+    state.fixedSchedule = [];
+    state.fixedLoadError = false;
     state.selectedMonth = null;
     state.rangeMode = false;
     state.rangeStart = null;
