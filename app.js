@@ -1,9 +1,11 @@
 /* ── Config ────────────────────────────────────────────────────────────────── */
 const DEFAULT_SHEET_URL =
-  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQukvlfbVuwS7R1PizzrfK6kiK6A7ZmEywq4lBxQmjOD0sASVlJOfxVJXL1BO_eqLze6vGfL5yBm3dw/pub?gid=0&single=true&output=csv';
+  'https://docs.google.com/spreadsheets/d/1e5iYsp__vAJvYsc5JXSNSTYiqMrN962E1I293QsgRSA/edit';
+
+const VARIABLE_TAB_NAME = 'Variable Expenses';
+const FIXED_TAB_NAME = 'Fixed Expenses';
 
 const STORAGE_KEY = 'expense_tracker_sheet_url';
-const FIXED_SHEET_STORAGE_KEY = 'expense_tracker_fixed_sheet_url';
 const THEME_STORAGE_KEY = 'expense_tracker_theme';
 const ROWS_PER_PAGE = 20;
 
@@ -268,34 +270,46 @@ async function fetchWithTimeout(url, ms) {
   }
 }
 
+function extractSpreadsheetId(url) {
+  const m = (url || '').match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]{20,})/);
+  return m ? m[1] : null;
+}
+
+function buildSheetTabUrl(spreadsheetId, tabName) {
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
+}
+
+async function fetchCsvWithFallback(url) {
+  const bustedUrl = url + '&t=' + Date.now();
+  let res = await fetchWithTimeout(bustedUrl, 6000);
+  if (!res) {
+    for (const proxyFn of CORS_PROXIES) {
+      res = await fetchWithTimeout(proxyFn(bustedUrl), 7000);
+      if (res) break;
+    }
+  }
+  if (!res) return null;
+  try { return await res.text(); } catch { return null; }
+}
+
 async function loadData() {
   const sheetUrl = localStorage.getItem(STORAGE_KEY) || DEFAULT_SHEET_URL;
-  const url = sheetUrl + '&t=' + Date.now();
+  const spreadsheetId = extractSpreadsheetId(sheetUrl);
 
   showLoader(true);
   hideError();
 
-  // Try direct fetch first
-  let res = await fetchWithTimeout(url, 6000);
-
-  // Waterfall through CORS proxies
-  if (!res) {
-    for (const proxyFn of CORS_PROXIES) {
-      res = await fetchWithTimeout(proxyFn(url), 7000);
-      if (res) break;
-    }
-  }
-
-  showLoader(false);
-
-  if (!res) {
-    showError('Could not load expense data. Check your sheet URL and try again.');
+  if (!spreadsheetId) {
+    showLoader(false);
+    showError("Could not find a spreadsheet ID in that link. Paste your Google Sheet's normal share link (e.g. https://docs.google.com/spreadsheets/d/XXXXX/edit).");
     return;
   }
 
-  let csvText;
-  try { csvText = await res.text(); } catch {
-    showError('Failed to read response. Please retry.');
+  const csvText = await fetchCsvWithFallback(buildSheetTabUrl(spreadsheetId, VARIABLE_TAB_NAME));
+  showLoader(false);
+
+  if (csvText === null) {
+    showError('Could not load expense data. Check your sheet link, sharing settings, and try again.');
     return;
   }
 
@@ -303,7 +317,7 @@ async function loadData() {
   state.lastFetched = new Date();
 
   if (state.allRows.length === 0) {
-    showError('No valid rows found. Ensure your sheet has columns: Date, Category, Description, Amount.');
+    showError(`No valid rows found. Make sure your sheet has a tab named "${VARIABLE_TAB_NAME}" with columns: Date, Category, Description, Amount.`);
     return;
   }
 
@@ -317,38 +331,27 @@ async function loadData() {
 }
 
 async function loadFixedData() {
-  const fixedSheetUrl = localStorage.getItem(FIXED_SHEET_STORAGE_KEY);
-  if (!fixedSheetUrl) {
-    state.fixedSchedule = [];
-    state.fixedLoadError = false;
-    renderFixedTab();
-    return;
-  }
+  const sheetUrl = localStorage.getItem(STORAGE_KEY) || DEFAULT_SHEET_URL;
+  const spreadsheetId = extractSpreadsheetId(sheetUrl);
 
-  const url = fixedSheetUrl + '&t=' + Date.now();
-  let res = await fetchWithTimeout(url, 6000);
-  if (!res) {
-    for (const proxyFn of CORS_PROXIES) {
-      res = await fetchWithTimeout(proxyFn(url), 7000);
-      if (res) break;
-    }
-  }
-
-  if (!res) {
+  if (!spreadsheetId) {
     state.fixedSchedule = [];
     state.fixedLoadError = true;
     renderFixedTab();
     return;
   }
 
-  try {
-    const csvText = await res.text();
-    state.fixedSchedule = parseFixedCSV(csvText);
-    state.fixedLoadError = false;
-  } catch {
+  const csvText = await fetchCsvWithFallback(buildSheetTabUrl(spreadsheetId, FIXED_TAB_NAME));
+
+  if (csvText === null) {
     state.fixedSchedule = [];
     state.fixedLoadError = true;
+    renderFixedTab();
+    return;
   }
+
+  state.fixedSchedule = parseFixedCSV(csvText);
+  state.fixedLoadError = false;
   renderFixedTab();
 }
 
@@ -1054,12 +1057,10 @@ function renderFixedBarChart() {
 function renderFixedTab() {
   if (!state.selectedMonth) return;
 
-  const configured = !!localStorage.getItem(FIXED_SHEET_STORAGE_KEY);
-  document.getElementById('fixed-not-configured').classList.toggle('hidden', configured);
-  document.getElementById('fixed-load-error').classList.toggle('hidden', !(configured && state.fixedLoadError));
-  document.getElementById('fixed-content').classList.toggle('hidden', !configured || state.fixedLoadError);
+  document.getElementById('fixed-unavailable').classList.toggle('hidden', !state.fixedLoadError);
+  document.getElementById('fixed-content').classList.toggle('hidden', state.fixedLoadError);
 
-  if (!configured || state.fixedLoadError) return;
+  if (state.fixedLoadError) return;
 
   const fm = computeFixedMetrics(state.selectedMonth);
   document.getElementById('val-fixed-total').textContent = fmt(fm.total);
@@ -1136,10 +1137,8 @@ function hideSetupModal() {
 function showSettingsModal() {
   const stored = localStorage.getItem(STORAGE_KEY) || DEFAULT_SHEET_URL;
   document.getElementById('settings-url-input').value = stored;
-  document.getElementById('settings-fixed-url-input').value = localStorage.getItem(FIXED_SHEET_STORAGE_KEY) || '';
   document.getElementById('settings-modal').classList.remove('hidden');
   document.getElementById('settings-error').classList.add('hidden');
-  document.getElementById('settings-fixed-error').classList.add('hidden');
 }
 
 function hideSettingsModal() {
@@ -1163,6 +1162,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tab-btn-fixed').addEventListener('click', () => switchTab('fixed'));
 
   document.getElementById('fixed-setup-settings-btn').addEventListener('click', showSettingsModal);
+  document.getElementById('fixed-retry-btn').addEventListener('click', loadFixedData);
 
   // Keep in sync with live OS theme changes when the user hasn't made an explicit choice
   if (window.matchMedia) {
@@ -1187,11 +1187,13 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ── Setup modal ── */
   document.getElementById('setup-save-btn').addEventListener('click', () => {
     const val = document.getElementById('setup-url-input').value.trim();
-    if (!isValidUrl(val)) {
-      document.getElementById('setup-error').classList.remove('hidden');
+    const errEl = document.getElementById('setup-error');
+    if (!isValidUrl(val) || !extractSpreadsheetId(val)) {
+      errEl.textContent = "Please paste your Google Sheet's normal share link (e.g. https://docs.google.com/spreadsheets/d/XXXXX/edit).";
+      errEl.classList.remove('hidden');
       return;
     }
-    document.getElementById('setup-error').classList.add('hidden');
+    errEl.classList.add('hidden');
     localStorage.setItem(STORAGE_KEY, val);
     hideSetupModal();
     loadData();
@@ -1209,22 +1211,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('settings-save-btn').addEventListener('click', () => {
     const val = document.getElementById('settings-url-input').value.trim();
-    const fixedVal = document.getElementById('settings-fixed-url-input').value.trim();
+    const errEl = document.getElementById('settings-error');
 
-    if (!isValidUrl(val)) {
-      document.getElementById('settings-error').classList.remove('hidden');
+    if (!isValidUrl(val) || !extractSpreadsheetId(val)) {
+      errEl.textContent = "Please paste your Google Sheet's normal share link (e.g. https://docs.google.com/spreadsheets/d/XXXXX/edit).";
+      errEl.classList.remove('hidden');
       return;
     }
-    if (fixedVal && !isValidUrl(fixedVal)) {
-      document.getElementById('settings-fixed-error').classList.remove('hidden');
-      return;
-    }
-    document.getElementById('settings-error').classList.add('hidden');
-    document.getElementById('settings-fixed-error').classList.add('hidden');
+    errEl.classList.add('hidden');
 
     localStorage.setItem(STORAGE_KEY, val);
-    if (fixedVal) localStorage.setItem(FIXED_SHEET_STORAGE_KEY, fixedVal);
-    else localStorage.removeItem(FIXED_SHEET_STORAGE_KEY);
 
     hideSettingsModal();
     state.allRows = [];

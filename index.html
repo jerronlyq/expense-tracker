@@ -30,13 +30,13 @@
   <div id="setup-modal" class="modal-backdrop hidden">
     <div class="modal-card">
       <h2 class="modal-title">Welcome to Apex Expense Tracker</h2>
-      <p class="modal-desc">Paste your Google Sheets CSV link below to get started. You can update this anytime from the settings icon.</p>
-      <label class="input-label" for="setup-url-input">Google Sheets CSV URL</label>
+      <p class="modal-desc">Paste your Google Sheet's share link below to get started. Your sheet needs two tabs named exactly <code>Variable Expenses</code> and <code>Fixed Expenses</code>, and must be shared as "Anyone with the link – Viewer". You can update this anytime from the settings icon.</p>
+      <label class="input-label" for="setup-url-input">Google Sheets Link</label>
       <input
         id="setup-url-input"
         class="url-input"
         type="url"
-        placeholder="https://docs.google.com/spreadsheets/d/…/pub?output=csv"
+        placeholder="https://docs.google.com/spreadsheets/d/…/edit"
       />
       <p id="setup-error" class="input-error hidden">Please enter a valid URL.</p>
       <button id="setup-save-btn" class="btn-primary">Load Dashboard</button>
@@ -47,13 +47,10 @@
   <div id="settings-modal" class="modal-backdrop hidden">
     <div class="modal-card">
       <h2 class="modal-title">Update Data Source</h2>
-      <p class="modal-desc">Change the Google Sheets CSV URL. The dashboard will reload with fresh data.</p>
-      <label class="input-label" for="settings-url-input">Google Sheets CSV URL</label>
+      <p class="modal-desc">Change the Google Sheets link. Both the Variable Expenses and Fixed Expenses tabs are read from this same sheet. The dashboard will reload with fresh data.</p>
+      <label class="input-label" for="settings-url-input">Google Sheets Link</label>
       <input id="settings-url-input" class="url-input" type="url" />
       <p id="settings-error" class="input-error hidden">Please enter a valid URL.</p>
-      <label class="input-label" for="settings-fixed-url-input">Fixed Expenses Sheet CSV URL (optional)</label>
-      <input id="settings-fixed-url-input" class="url-input" type="url" placeholder="Leave blank if not set up yet" />
-      <p id="settings-fixed-error" class="input-error hidden">Please enter a valid URL.</p>
       <div class="modal-actions">
         <button id="settings-cancel-btn" class="btn-secondary">Cancel</button>
         <button id="settings-save-btn" class="btn-primary">Save &amp; Reload</button>
@@ -288,14 +285,13 @@
 
     <div id="tab-panel-fixed" class="tab-panel hidden">
 
-      <div id="fixed-not-configured" class="card fixed-empty-state hidden">
-        <h2 class="card-heading no-margin">Fixed Expenses not set up yet</h2>
-        <p class="modal-desc">Create a tab in your Google Sheet with columns <code>Category, Description, Amount, Start Date, End Date</code> — one row per fixed expense, only edited when something starts, changes price, or gets cancelled. Publish it to the web as CSV (File → Share → Publish to web, select that tab), then paste the link in Settings.</p>
-        <button id="fixed-setup-settings-btn" class="btn-primary">Open Settings</button>
-      </div>
-
-      <div id="fixed-load-error" class="error-banner hidden">
-        <span>Could not load your Fixed Expenses sheet. Check the URL in Settings and try again.</span>
+      <div id="fixed-unavailable" class="card fixed-empty-state hidden">
+        <h2 class="card-heading no-margin">Fixed Expenses not available</h2>
+        <p class="modal-desc">Make sure your spreadsheet has a tab named exactly <code>Fixed Expenses</code> with columns <code>Category, Description, Amount, Start Date, End Date</code> — one row per fixed expense, only edited when something starts, changes price, or gets cancelled. The sheet also needs to be shared as "Anyone with the link – Viewer".</p>
+        <div class="fixed-empty-state-actions">
+          <button id="fixed-retry-btn" class="btn-primary">Retry</button>
+          <button id="fixed-setup-settings-btn" class="btn-secondary">Open Settings</button>
+        </div>
       </div>
 
       <div id="fixed-content" class="hidden">

@@ -544,7 +544,9 @@ body {
   align-items: flex-start;
   gap: 1rem;
 }
-.fixed-empty-state .modal-desc code {
+.fixed-empty-state-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+.modal-desc code {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 0.82em;
   background: var(--bg-elevated);
