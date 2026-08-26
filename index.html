@@ -314,12 +314,20 @@
           </div>
         </section>
 
-        <div class="card chart-card">
-          <h2 class="card-heading">Fixed Expenses Overview</h2>
-          <div class="chart-wrapper">
-            <canvas id="chart-bar-fixed" aria-label="Fixed expenses month over month bar chart"></canvas>
+        <section class="two-col-row" aria-label="Fixed expenses charts">
+          <div class="card chart-card">
+            <h2 class="card-heading">Spending by Category</h2>
+            <div class="chart-wrapper">
+              <canvas id="chart-donut-fixed" aria-label="Fixed expenses category breakdown donut chart"></canvas>
+            </div>
           </div>
-        </div>
+          <div class="card chart-card bar-chart-card">
+            <h2 class="card-heading">Fixed Expenses Overview</h2>
+            <div class="chart-wrapper">
+              <canvas id="chart-bar-fixed" aria-label="Fixed expenses month over month bar chart"></canvas>
+            </div>
+          </div>
+        </section>
 
         <div class="card table-card">
           <h2 class="card-heading">Fixed Expenses Schedule</h2>
@@ -327,12 +335,12 @@
             <table id="fixed-table" aria-label="Fixed expenses schedule">
               <thead>
                 <tr>
-                  <th>Description</th>
-                  <th>Category</th>
-                  <th class="text-right">Amount</th>
-                  <th>Start Date</th>
-                  <th>End Date</th>
-                  <th>Status</th>
+                  <th class="sortable" data-sort="description">Description <span class="sort-icon">↕</span></th>
+                  <th class="sortable" data-sort="category">Category <span class="sort-icon">↕</span></th>
+                  <th class="sortable text-right" data-sort="amount">Amount <span class="sort-icon">↕</span></th>
+                  <th class="sortable" data-sort="startDate">Start Date <span class="sort-icon">↕</span></th>
+                  <th class="sortable" data-sort="endDate">End Date <span class="sort-icon">↕</span></th>
+                  <th class="sortable" data-sort="status">Status <span class="sort-icon">↕</span></th>
                 </tr>
               </thead>
               <tbody id="fixed-tbody"></tbody>

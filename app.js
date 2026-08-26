@@ -10,6 +10,7 @@ const THEME_STORAGE_KEY = 'expense_tracker_theme';
 const ROWS_PER_PAGE = 20;
 
 const CATEGORY_COLORS = {
+  // Variable Expenses categories
   'Food':          '#ff6b35',
   'Transport':     '#00aaff',
   'Taxi':          '#b06aff',
@@ -21,6 +22,13 @@ const CATEGORY_COLORS = {
   'Lifestyle':     '#c084fc',
   'Gifts':         '#ff4d6d',
   'Others':        '#4a6880',
+
+  // Fixed Expenses categories
+  'Insurance':     '#22c55e',
+  'Taxes':         '#dc2626',
+  'Membership':    '#a3e635',
+  'Family':        '#818cf8',
+  'Subscription':  '#e879f9',
 };
 
 const CORS_PROXIES = [
@@ -42,6 +50,7 @@ const state = {
     donut:  null,
     barMom: null,
     barFixed: null,
+    donutFixed: null,
   },
 
   searchQuery: '',
@@ -53,6 +62,8 @@ const state = {
   activeTab:      'variable',
   fixedSchedule:  [],
   fixedLoadError: false,
+  fixedSortCol:   'startDate',
+  fixedSortDir:   'desc',
 };
 
 /* ── Utilities ─────────────────────────────────────────────────────────────── */
@@ -253,7 +264,12 @@ function computeFixedMetrics(monthKey) {
   const discontinuedCount = state.fixedSchedule.filter(r =>
     r.endDate && toYYYYMM(r.endDate) < monthKey
   ).length;
-  return { total, activeCount: activeRows.length, discontinuedCount, activeRows };
+
+  const catTotals = {};
+  activeRows.forEach(r => { catTotals[r.category] = (catTotals[r.category] || 0) + r.amount; });
+  const catSorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
+
+  return { total, activeCount: activeRows.length, discontinuedCount, activeRows, catSorted };
 }
 
 /* ── Fetch with CORS proxy waterfall ──────────────────────────────────────── */
@@ -398,6 +414,22 @@ function getLastNMonths(n) {
     months.push(toYYYYMM(new Date(y, m - 1 - i, 1)));
   }
   return months;
+}
+
+// For each month in `months`, compares its total (via getTotalForMonth) against the
+// preceding calendar month's total — even if that preceding month falls outside
+// `months` itself (e.g. the oldest bar in a 6-month window). Returns null per-entry
+// when there's no prior data to compare against.
+function computeMoMForMonths(months, getTotalForMonth) {
+  return months.map(mo => {
+    const [y, m] = mo.split('-').map(Number);
+    const prevKey = toYYYYMM(new Date(y, m - 2, 1));
+    const total = getTotalForMonth(mo);
+    const prevTotal = getTotalForMonth(prevKey);
+    if (prevTotal <= 0) return null;
+    const delta = total - prevTotal;
+    return { delta, pct: (delta / prevTotal) * 100 };
+  });
 }
 
 function getDailyTotals() {
@@ -570,6 +602,48 @@ function destroyChart(key) {
   if (state.charts[key]) { state.charts[key].destroy(); state.charts[key] = null; }
 }
 
+// Shared custom tooltip for the monthly bar charts — Chart.js's default canvas
+// tooltip can't render per-line colored text, so this renders an HTML tooltip
+// showing the total plus a colored MoM %/amount with an up/down arrow.
+// `momData` is a per-bar array from computeMoMForMonths(), parallel to the chart's labels.
+function monthlyBarTooltipHandler(momData) {
+  return (context) => {
+    const { chart, tooltip } = context;
+    let el = document.getElementById('chart-tooltip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'chart-tooltip';
+      el.className = 'chart-tooltip';
+      document.body.appendChild(el);
+    }
+
+    if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) {
+      el.style.opacity = 0;
+      return;
+    }
+
+    const dp = tooltip.dataPoints[0];
+    const mom = momData[dp.dataIndex];
+
+    let html = `<div class="chart-tooltip-total">${fmt(dp.raw)}</div>`;
+    if (mom) {
+      const isUp = mom.delta >= 0;
+      const arrow = isUp ? '↑' : '↓';
+      const sign = isUp ? '+' : '';
+      const cls = isUp ? 'up' : 'down';
+      html += `<div class="chart-tooltip-mom chart-tooltip-mom--${cls}">${arrow} ${sign}${fmt(mom.delta)} (${sign}${mom.pct.toFixed(1)}%) vs last month</div>`;
+    } else {
+      html += `<div class="chart-tooltip-mom chart-tooltip-mom--neutral">No prior data</div>`;
+    }
+    el.innerHTML = html;
+
+    const canvasRect = chart.canvas.getBoundingClientRect();
+    el.style.opacity = 1;
+    el.style.left = (canvasRect.left + window.pageXOffset + tooltip.caretX) + 'px';
+    el.style.top = (canvasRect.top + window.pageYOffset + tooltip.caretY) + 'px';
+  };
+}
+
 function renderDonutChart(vm) {
   destroyChart('donut');
   if (!vm.catSorted.length) return;
@@ -619,9 +693,10 @@ function renderMoMBarChart() {
   destroyChart('barMom');
   const months = getLastNMonths(6);
   const labels = months.map(formatMonthLabel);
-  const totals = months.map(mo =>
-    state.allRows.filter(r => toYYYYMM(r.date) === mo).reduce((s, r) => s + r.amount, 0)
-  );
+  const getTotalForMonth = mo =>
+    state.allRows.filter(r => toYYYYMM(r.date) === mo).reduce((s, r) => s + r.amount, 0);
+  const totals = months.map(getTotalForMonth);
+  const momData = computeMoMForMonths(months, getTotalForMonth);
   const colors = months.map(mo =>
     mo === state.selectedMonth ? 'rgba(70,184,212,0.6)' : 'rgba(70,184,212,0.15)'
   );
@@ -649,9 +724,8 @@ function renderMoMBarChart() {
         plugins: {
           legend: { display: false },
           tooltip: {
-            callbacks: {
-              label: ctx => ` Total: ${fmt(ctx.raw)}`,
-            },
+            enabled: false,
+            external: monthlyBarTooltipHandler(momData),
           },
         },
         scales: {
@@ -1002,11 +1076,58 @@ function renderAll() {
 }
 
 /* ── Render: Fixed Expenses Tab ───────────────────────────────────────────── */
+function renderFixedDonutChart(fm) {
+  destroyChart('donutFixed');
+  if (!fm.catSorted.length) return;
+
+  const labels = fm.catSorted.map(([k]) => k);
+  const values = fm.catSorted.map(([, v]) => v);
+  const total  = fm.total;
+  const colors = labels.map(getCatColor);
+
+  state.charts.donutFixed = new Chart(
+    document.getElementById('chart-donut-fixed').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: cssVar('--chart-segment-gap'),
+          hoverOffset: 6,
+        }],
+      },
+      options: {
+        cutout: '70%',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { padding: 14, usePointStyle: true, pointStyleWidth: 8, font: { size: 12 } },
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const pct = total > 0 ? (ctx.raw / total * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${fmt(ctx.raw)} (${pct}%)`;
+              },
+            },
+          },
+        },
+      },
+    }
+  );
+}
+
 function renderFixedBarChart() {
   destroyChart('barFixed');
   const months = getLastNMonths(6);
   const labels = months.map(formatMonthLabel);
-  const totals = months.map(mo => getActiveFixedRows(mo).reduce((s, r) => s + r.amount, 0));
+  const getTotalForMonth = mo => getActiveFixedRows(mo).reduce((s, r) => s + r.amount, 0);
+  const totals = months.map(getTotalForMonth);
+  const momData = computeMoMForMonths(months, getTotalForMonth);
   const colors = months.map(mo =>
     mo === state.selectedMonth ? 'rgba(70,184,212,0.6)' : 'rgba(70,184,212,0.15)'
   );
@@ -1034,9 +1155,8 @@ function renderFixedBarChart() {
         plugins: {
           legend: { display: false },
           tooltip: {
-            callbacks: {
-              label: ctx => ` Total: ${fmt(ctx.raw)}`,
-            },
+            enabled: false,
+            external: monthlyBarTooltipHandler(momData),
           },
         },
         scales: {
@@ -1054,6 +1174,32 @@ function renderFixedBarChart() {
   );
 }
 
+function getSortedFixedSchedule() {
+  const rows = [...state.fixedSchedule];
+  const col = state.fixedSortCol;
+  const dir = state.fixedSortDir;
+
+  rows.sort((a, b) => {
+    let aVal, bVal;
+    switch (col) {
+      case 'description': aVal = a.description.toLowerCase(); bVal = b.description.toLowerCase(); break;
+      case 'category':    aVal = a.category.toLowerCase();    bVal = b.category.toLowerCase();    break;
+      case 'amount':       aVal = a.amount; bVal = b.amount; break;
+      case 'endDate':      aVal = a.endDate ? a.endDate.getTime() : Infinity; bVal = b.endDate ? b.endDate.getTime() : Infinity; break;
+      case 'status':       aVal = a.endDate ? 0 : 1; bVal = b.endDate ? 0 : 1; break;
+      case 'startDate':
+      default:             aVal = a.startDate.getTime(); bVal = b.startDate.getTime();
+    }
+    if (typeof aVal === 'string') {
+      const cmp = aVal.localeCompare(bVal);
+      return dir === 'asc' ? cmp : -cmp;
+    }
+    return dir === 'asc' ? aVal - bVal : bVal - aVal;
+  });
+
+  return rows;
+}
+
 function renderFixedTab() {
   if (!state.selectedMonth) return;
 
@@ -1068,7 +1214,12 @@ function renderFixedTab() {
   document.getElementById('val-fixed-active').textContent = fm.activeCount;
   document.getElementById('val-fixed-discontinued').textContent = fm.discontinuedCount;
 
-  renderFixedBarChart();
+  // Chart.js can't reliably size/paint a canvas inside a display:none container,
+  // so only (re)create these charts while the Fixed tab is actually visible.
+  if (state.activeTab === 'fixed') {
+    renderFixedDonutChart(fm);
+    renderFixedBarChart();
+  }
 
   const tbody = document.getElementById('fixed-tbody');
   tbody.innerHTML = '';
@@ -1080,7 +1231,7 @@ function renderFixedTab() {
     return;
   }
 
-  state.fixedSchedule.forEach(r => {
+  getSortedFixedSchedule().forEach(r => {
     const catColor = getCatColor(r.category);
     const isOngoing = !r.endDate;
     const statusClass = isOngoing ? 'active' : 'discontinued';
@@ -1106,6 +1257,8 @@ function switchTab(tab) {
   document.getElementById('tab-btn-fixed').classList.toggle('active', tab === 'fixed');
   document.getElementById('tab-panel-variable').classList.toggle('hidden', tab !== 'variable');
   document.getElementById('tab-panel-fixed').classList.toggle('hidden', tab !== 'fixed');
+  // Panel is now visible (if switching to it) - (re)create its charts now, not while hidden.
+  if (tab === 'fixed') renderFixedTab();
 }
 
 /* ── UI Helpers ───────────────────────────────────────────────────────────── */
@@ -1316,6 +1469,23 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       th.classList.add(state.sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
       renderTxnTable();
+    });
+  });
+
+  document.querySelectorAll('#fixed-table th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      if (state.fixedSortCol === col) {
+        state.fixedSortDir = state.fixedSortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        state.fixedSortCol = col;
+        state.fixedSortDir = 'desc';
+      }
+      document.querySelectorAll('#fixed-table th.sortable').forEach(h => {
+        h.classList.remove('sort-asc', 'sort-desc');
+      });
+      th.classList.add(state.fixedSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+      renderFixedTab();
     });
   });
 

@@ -62,9 +62,13 @@ Cache-busting `&t=Date.now()` is appended to every URL. If the Fixed Expenses fe
 ---
 
 ## Categories
-Exactly 11 categories. Adding a new one requires updating **both**:
+Both tabs share one `CATEGORY_COLORS` map/`--col-*` set in app.js/style.css, but use **separate taxonomies** — Variable Expenses' categories are validated by the Telegram bot (`CATEGORIES` array in `TelegramGAS.gs`) and must match exactly; Fixed Expenses' categories are free text, whatever's typed in the sheet's `Category` column. Adding a new category (either tab) requires updating **both**:
 - `CATEGORY_COLORS` in `app.js`
 - The corresponding CSS custom property (`--col-*`) in `style.css `:root``
+
+An unrecognized category (typo, or a brand-new one not yet added here) falls back to a generic gray (`getCatColor()` in app.js) rather than erroring.
+
+**Variable Expenses (11, bot-validated):**
 
 | Category | Colour |
 |---|---|
@@ -79,6 +83,16 @@ Exactly 11 categories. Adding a new one requires updating **both**:
 | Lifestyle | `#c084fc` |
 | Gifts | `#ff4d6d` |
 | Others | `#4a6880` |
+
+**Fixed Expenses (free text, whatever's in the sheet):**
+
+| Category | Colour |
+|---|---|
+| Insurance | `#22c55e` |
+| Taxes | `#dc2626` |
+| Membership | `#a3e635` |
+| Family | `#818cf8` |
+| Subscription | `#e879f9` |
 
 ---
 
@@ -153,6 +167,10 @@ loadData()
 ### Chart.js usage
 Charts are **destroyed then recreated** on every `renderAll()` call — this avoids canvas reuse errors. Always call `destroyChart(key)` before `new Chart(...)`.
 
+**Gotcha:** never create a chart while its container is `display:none` (e.g. a background tab panel) — Chart.js can't reliably size/paint into a zero-size canvas, and it doesn't always repaint correctly even after the container becomes visible later. `renderFixedTab()` guards its two chart calls behind `state.activeTab === 'fixed'` for exactly this reason, and `switchTab()` re-runs `renderFixedTab()` right after unhiding the panel so the charts get created for the first time while genuinely visible.
+
+**Monthly bar chart tooltips** (`renderMoMBarChart()` / `renderFixedBarChart()`) use a custom HTML tooltip instead of Chart.js's default canvas-rendered one — the default can't render per-line colored text, and these need a red/green MoM %+arrow alongside the total. `monthlyBarTooltipHandler(momData)` is a shared factory (`plugins.tooltip.enabled: false` + `external:` hook) that both charts pass their own precomputed `momData` (from `computeMoMForMonths()`) into; it renders into one shared `#chart-tooltip` div appended to `document.body`, styled in style.css's `.chart-tooltip*` rules. `computeMoMForMonths()` compares each bar's month against its preceding calendar month even when that month falls outside the visible 6-month window.
+
 Chart.js is loaded via CDN:
 ```html
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -221,8 +239,8 @@ Dark values live on the bare `:root` (default). Light overrides live in two plac
 
 ### Fixed Expenses tab
 1. **Summary cards** — Total Fixed This Month, Active This Month, Discontinued (all scoped to the shared month selector, reconstructed historically via the Start/End Date schedule)
-2. **Fixed Expenses Overview** — bar chart, last 6 months
-3. **Fixed Expenses Schedule** — full ledger table (Description, Category, Amount, Start Date, End Date, Status) — not scoped to the selected month, always shows everything
+2. **Row 2** — Donut chart (category breakdown, active rows for the selected month) + Bar chart (last 6 months)
+3. **Fixed Expenses Schedule** — full ledger table (Description, Category, Amount, Start Date, End Date, Status), sortable on every column — not scoped to the selected month, always shows everything
 4. **Empty/error state** (`#fixed-unavailable`) — shown instead of the above when the tab fetch fails; includes setup instructions and a Retry button
 
 ---
