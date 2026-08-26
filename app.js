@@ -1,6 +1,10 @@
 /* ── Config ────────────────────────────────────────────────────────────────── */
-const DEFAULT_SHEET_URL =
-  'https://docs.google.com/spreadsheets/d/1e5iYsp__vAJvYsc5JXSNSTYiqMrN962E1I293QsgRSA/edit';
+// No hardcoded default here on purpose — a real spreadsheet ID used to live in this
+// constant, which is a real link to someone's private financial data and this repo
+// is public. Every visitor (including the owner, on a fresh browser/device) pastes
+// their own sheet's share link into the setup modal; it's then remembered locally
+// via localStorage (STORAGE_KEY), never committed anywhere.
+const DEFAULT_SHEET_URL = '';
 
 const VARIABLE_TAB_NAME = 'Variable Expenses';
 const FIXED_TAB_NAME = 'Fixed Expenses';
@@ -71,6 +75,19 @@ const fmt = v =>
   new Intl.NumberFormat('en-SG', {
     style: 'currency', currency: 'SGD', minimumFractionDigits: 2,
   }).format(v);
+
+// Category/Description (and anything else read from the sheet) are untrusted —
+// they end up interpolated into innerHTML template strings all over the render
+// functions below, so every such value must be escaped here first to prevent
+// stored XSS (e.g. a description of `<img src=x onerror=...>` in the sheet).
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 const toYYYYMM = d =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -877,8 +894,8 @@ function openDayDetail(dateStr) {
     const color = getCatColor(r.category);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><span class="cat-badge" style="--cat-color:${color}">${r.category}</span></td>
-      <td style="color:var(--text-secondary)">${r.description || '—'}</td>
+      <td><span class="cat-badge" style="--cat-color:${color}">${escapeHtml(r.category)}</span></td>
+      <td style="color:var(--text-secondary)">${escapeHtml(r.description) || '—'}</td>
       <td class="text-right amount-cell">${fmt(r.amount)}</td>
     `;
     tbody.appendChild(tr);
@@ -948,7 +965,7 @@ function renderCategoryTable(vm) {
     const color = getCatColor(cat);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><span class="cat-badge" style="--cat-color:${color}">${cat}</span></td>
+      <td><span class="cat-badge" style="--cat-color:${color}">${escapeHtml(cat)}</span></td>
       <td class="text-right">${fmt(amt)}</td>
       <td class="text-right">${pct}%</td>
       <td class="text-right">${count}</td>
@@ -971,7 +988,7 @@ function renderInsights(monthMetrics, vm) {
 
   // Biggest expense
   if (vm.biggest) {
-    const desc = vm.biggest.description || vm.biggest.category;
+    const desc = escapeHtml(vm.biggest.description || vm.biggest.category);
     document.getElementById('iv-biggest').innerHTML =
       `${desc} — <strong>${fmt(vm.biggest.amount)}</strong>`;
   } else {
@@ -981,7 +998,7 @@ function renderInsights(monthMetrics, vm) {
   // Most expensive day
   if (vm.busiestDay) {
     const d = parseFlexibleDate(vm.busiestDay);
-    const label = d ? formatDisplayDate(d) : vm.busiestDay;
+    const label = escapeHtml(d ? formatDisplayDate(d) : vm.busiestDay);
     document.getElementById('iv-busiest').innerHTML =
       `${label} — <strong>${fmt(vm.busiestAmt)}</strong>`;
   } else {
@@ -1032,8 +1049,8 @@ function renderTxnTable() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td style="white-space:nowrap">${formatDisplayDate(r.date)}</td>
-        <td><span class="cat-badge" style="--cat-color:${color}">${r.category}</span></td>
-        <td class="desc-cell">${r.description || '—'}</td>
+        <td><span class="cat-badge" style="--cat-color:${color}">${escapeHtml(r.category)}</span></td>
+        <td class="desc-cell">${escapeHtml(r.description) || '—'}</td>
         <td class="text-right amount-cell">${fmt(r.amount)}</td>
       `;
       tbody.appendChild(tr);
@@ -1239,8 +1256,8 @@ function renderFixedTab() {
     const endLabel = r.endDate ? formatDisplayDate(r.endDate) : '—';
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${r.description}</td>
-      <td><span class="cat-badge" style="--cat-color:${catColor}">${r.category}</span></td>
+      <td>${escapeHtml(r.description)}</td>
+      <td><span class="cat-badge" style="--cat-color:${catColor}">${escapeHtml(r.category)}</span></td>
       <td class="text-right amount-cell">${fmt(r.amount)}</td>
       <td style="white-space:nowrap">${formatDisplayDate(r.startDate)}</td>
       <td style="white-space:nowrap">${endLabel}</td>
