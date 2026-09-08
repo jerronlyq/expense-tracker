@@ -125,7 +125,7 @@ const state = {
 loadData()
   └─> extractSpreadsheetId()  →  buildSheetTabUrl(id, 'Variable Expenses')
         └─> fetchCsvWithFallback()  →  parseCSV()  →  state.allRows
-              └─> populateMonthFilter()  →  state.selectedMonth
+              └─> populateDateFilters()  →  state.selectedMonth
                     └─> renderAll()
                           ├─> computeMetrics()         — all derived numbers, month-only
                           ├─> computeViewMetrics()     — search/range-aware numbers
@@ -153,7 +153,8 @@ loadData()
 | `computeViewMetrics()` | Same shape of derived values, but sourced from `getFilteredRows()` (search + month/range aware) — feeds Summary cards, Donut, Category table, Txn table |
 | `getFilteredRows()` | `getRangeRows()` or `getMonthRows()` depending on `state.rangeMode`, then applies `state.searchQuery` |
 | `getMonthRows(month?)` | Filters `state.allRows` to selected (or given) month |
-| `getLastNMonths(n)` | Returns array of N `'YYYY-MM'` keys ending at selected month |
+| `getYearMonths(year)` | Returns all 12 `'YYYY-MM'` keys (Jan–Dec) for `year` — the monthly bar charts' window |
+| `populateDateFilters()` / `populateMonthOptionsForYear(year)` | Populate the Year `<select>` from years present in the data, then the Month `<select>` with Jan–Dec of whichever year is active |
 | `getDailyTotals()` | Returns `{ totals: {day→amount}, byDay: {day→rows[]} }` for selected month |
 | `getCategoryTotals(month?)` | Returns `{ category→amount }` map |
 | `getDaysElapsed()` | Current month: today's date; past months: full month length |
@@ -171,7 +172,7 @@ Charts are **destroyed then recreated** on every `renderAll()` call — this avo
 
 **Gotcha:** never create a chart while its container is `display:none` (e.g. a background tab panel) — Chart.js can't reliably size/paint into a zero-size canvas, and it doesn't always repaint correctly even after the container becomes visible later. `renderFixedTab()` guards its two chart calls behind `state.activeTab === 'fixed'` for exactly this reason, and `switchTab()` re-runs `renderFixedTab()` right after unhiding the panel so the charts get created for the first time while genuinely visible.
 
-**Monthly bar chart tooltips** (`renderMoMBarChart()` / `renderFixedBarChart()`) use a custom HTML tooltip instead of Chart.js's default canvas-rendered one — the default can't render per-line colored text, and these need a red/green MoM %+arrow alongside the total. `monthlyBarTooltipHandler(momData)` is a shared factory (`plugins.tooltip.enabled: false` + `external:` hook) that both charts pass their own precomputed `momData` (from `computeMoMForMonths()`) into; it renders into one shared `#chart-tooltip` div appended to `document.body`, styled in style.css's `.chart-tooltip*` rules. `computeMoMForMonths()` compares each bar's month against its preceding calendar month even when that month falls outside the visible 6-month window.
+**Monthly bar chart tooltips** (`renderMoMBarChart()` / `renderFixedBarChart()`) use a custom HTML tooltip instead of Chart.js's default canvas-rendered one — the default can't render per-line colored text, and these need a red/green MoM %+arrow alongside the total. `monthlyBarTooltipHandler(momData)` is a shared factory (`plugins.tooltip.enabled: false` + `external:` hook) that both charts pass their own precomputed `momData` (from `computeMoMForMonths()`) into; it renders into one shared `#chart-tooltip` div appended to `document.body`, styled in style.css's `.chart-tooltip*` rules. `computeMoMForMonths()` compares each bar's month against its preceding calendar month even when that month falls outside the visible window (e.g. January's bar compares against the prior December, which isn't itself one of the 12 bars shown).
 
 Chart.js is loaded via CDN:
 ```html
@@ -223,7 +224,7 @@ Dark values live on the bare `:root` (default). Light overrides live in two plac
 
 ## Dashboard sections
 
-**Header** (shared across both tabs) — app title, month/year `<select>`, theme toggle, settings gear.
+**Header** (shared across both tabs) — app title, Year `<select>` + Month `<select>` (cascading: changing year repopulates the month list to Jan–Dec of that year and picks the most recent month with data), theme toggle, settings gear.
 
 **Tab switcher** — `Variable Expenses` / `Fixed Expenses`, below the header.
 
@@ -232,7 +233,7 @@ Dark values live on the bare `:root` (default). Light overrides live in two plac
 2. **Search box** — live filters the transactions table by description or category
 3. **Summary cards** — Total Spend, Avg Daily Spend, # Transactions, Top Category
 4. **MoM delta card** — vs previous month (hidden during custom range mode)
-5. **Row 2** — Donut chart (category breakdown) + Bar chart (last 6 months) (bar chart hidden during range mode)
+5. **Row 2** — Donut chart (category breakdown) + Bar chart (Jan–Dec of the selected year) (bar chart hidden during range mode)
 6. **Calendar** — full month grid with heat-map spend amounts; click day → detail panel (hidden during range mode)
 7. **Day detail panel** — slides in below calendar; shows all transactions for selected day
 8. **Category breakdown table** — Amount, Share %, # Txns per category
@@ -241,7 +242,7 @@ Dark values live on the bare `:root` (default). Light overrides live in two plac
 
 ### Fixed Expenses tab
 1. **Summary cards** — Total Fixed This Month, Active This Month, Discontinued (all scoped to the shared month selector, reconstructed historically via the Start/End Date schedule)
-2. **Row 2** — Donut chart (category breakdown, active rows for the selected month) + Bar chart (last 6 months)
+2. **Row 2** — Donut chart (category breakdown, active rows for the selected month) + Bar chart (Jan–Dec of the selected year)
 3. **Fixed Expenses Schedule** — full ledger table (Description, Category, Amount, Start Date, End Date, Status), sortable on every column — not scoped to the selected month, always shows everything
 4. **Empty/error state** (`#fixed-unavailable`) — shown instead of the above when the tab fetch fails; includes setup instructions and a Retry button
 

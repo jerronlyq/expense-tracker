@@ -67,6 +67,7 @@
         <span id="data-freshness" class="freshness-tag"></span>
       </div>
       <div class="header-right">
+        <select id="year-filter" class="month-select year-select" aria-label="Select year"></select>
         <select id="month-filter" class="month-select" aria-label="Select month"></select>
         <button id="theme-toggle-btn" class="icon-btn" title="Toggle light/dark theme" aria-label="Toggle theme">
           <svg id="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -168,7 +169,7 @@
         </div>
       </div>
       <div class="card chart-card bar-chart-card">
-        <h2 class="card-heading">Monthly Overview</h2>
+        <h2 class="card-heading" id="heading-bar-mom">Monthly Overview</h2>
         <div class="chart-wrapper">
           <canvas id="chart-bar-mom" aria-label="Month over month bar chart"></canvas>
         </div>
@@ -322,7 +323,7 @@
             </div>
           </div>
           <div class="card chart-card bar-chart-card">
-            <h2 class="card-heading">Fixed Expenses Overview</h2>
+            <h2 class="card-heading" id="heading-bar-fixed">Fixed Expenses Overview</h2>
             <div class="chart-wrapper">
               <canvas id="chart-bar-fixed" aria-label="Fixed expenses month over month bar chart"></canvas>
             </div>

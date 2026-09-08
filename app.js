@@ -97,6 +97,11 @@ function formatMonthLabel(yyyymm) {
   return new Date(y, m - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
 }
 
+function formatMonthShort(yyyymm) {
+  const [, m] = yyyymm.split('-').map(Number);
+  return MONTH_NAMES_SHORT[m - 1];
+}
+
 function formatDisplayDate(d) {
   return d.toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -357,7 +362,7 @@ async function loadData() {
   document.getElementById('data-freshness').textContent =
     'Updated ' + state.lastFetched.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' });
 
-  populateMonthFilter();
+  populateDateFilters();
   renderAll();
 
   loadFixedData();
@@ -388,26 +393,63 @@ async function loadFixedData() {
   renderFixedTab();
 }
 
-/* ── Month Filter ─────────────────────────────────────────────────────────── */
-function populateMonthFilter() {
-  const sel = document.getElementById('month-filter');
-  const months = [...new Set(state.allRows.map(r => toYYYYMM(r.date)))].sort().reverse();
+/* ── Year / Month Filter ───────────────────────────────────────────────────── */
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const MONTH_NAMES_SHORT = MONTH_NAMES.map(n => n.slice(0, 3));
 
-  sel.innerHTML = '';
-  months.forEach(m => {
+// Populates the Year dropdown from whatever years exist in the data, picks a
+// year (preserving the previous selection if still valid), then populates the
+// Month dropdown for that year. Called once after a fresh data load.
+function populateDateFilters() {
+  const yearSel = document.getElementById('year-filter');
+  const years = [...new Set(state.allRows.map(r => r.date.getFullYear()))].sort((a, b) => b - a);
+
+  yearSel.innerHTML = '';
+  years.forEach(y => {
     const opt = document.createElement('option');
-    opt.value = m;
-    opt.textContent = formatMonthLabel(m);
-    sel.appendChild(opt);
+    opt.value = y;
+    opt.textContent = y;
+    yearSel.appendChild(opt);
   });
 
-  // Preserve selection if still valid
-  if (state.selectedMonth && months.includes(state.selectedMonth)) {
-    sel.value = state.selectedMonth;
-  } else {
-    state.selectedMonth = months[0] || null;
-    sel.value = state.selectedMonth;
+  const prevYear = state.selectedMonth ? Number(state.selectedMonth.split('-')[0]) : null;
+  const year = (prevYear && years.includes(prevYear)) ? prevYear : (years[0] ?? new Date().getFullYear());
+  yearSel.value = year;
+
+  populateMonthOptionsForYear(year);
+}
+
+// Populates the Month dropdown with all 12 months of `year` (Jan–Dec, so the
+// full year is always navigable even where a given month has no data — those
+// months just render as an empty state, same as any other zero-transaction
+// month). Preserves the previously selected month if it falls within this
+// year, otherwise defaults to the most recent month in the year that has
+// data, falling back to December.
+function populateMonthOptionsForYear(year) {
+  const monthSel = document.getElementById('month-filter');
+  monthSel.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const key = `${year}-${String(m).padStart(2, '0')}`;
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = MONTH_NAMES_SHORT[m - 1];
+    opt.title = MONTH_NAMES[m - 1];
+    monthSel.appendChild(opt);
   }
+
+  const monthsWithData = [...new Set(
+    state.allRows.filter(r => r.date.getFullYear() === year).map(r => toYYYYMM(r.date))
+  )].sort().reverse();
+
+  if (state.selectedMonth && state.selectedMonth.startsWith(`${year}-`)) {
+    monthSel.value = state.selectedMonth;
+  } else {
+    monthSel.value = monthsWithData[0] || `${year}-12`;
+  }
+  state.selectedMonth = monthSel.value;
 }
 
 /* ── Derived Data Helpers ─────────────────────────────────────────────────── */
@@ -424,12 +466,10 @@ function getCategoryTotals(month) {
   return totals;
 }
 
-function getLastNMonths(n) {
-  const [y, m] = state.selectedMonth.split('-').map(Number);
+// All 12 months (Jan–Dec) of `year`, for the "full calendar year" bar charts.
+function getYearMonths(year) {
   const months = [];
-  for (let i = n - 1; i >= 0; i--) {
-    months.push(toYYYYMM(new Date(y, m - 1 - i, 1)));
-  }
+  for (let m = 1; m <= 12; m++) months.push(`${year}-${String(m).padStart(2, '0')}`);
   return months;
 }
 
@@ -708,8 +748,10 @@ function renderDonutChart(vm) {
 
 function renderMoMBarChart() {
   destroyChart('barMom');
-  const months = getLastNMonths(6);
-  const labels = months.map(formatMonthLabel);
+  const year = Number(state.selectedMonth.split('-')[0]);
+  document.getElementById('heading-bar-mom').textContent = `Monthly Overview — ${year}`;
+  const months = getYearMonths(year);
+  const labels = months.map(formatMonthShort);
   const getTotalForMonth = mo =>
     state.allRows.filter(r => toYYYYMM(r.date) === mo).reduce((s, r) => s + r.amount, 0);
   const totals = months.map(getTotalForMonth);
@@ -939,6 +981,7 @@ function syncRangeControlsUI() {
   });
   document.getElementById('range-clear-btn').classList.toggle('hidden', !state.rangeMode);
   document.getElementById('month-filter').disabled = state.rangeMode;
+  document.getElementById('year-filter').disabled = state.rangeMode;
   document.getElementById('date-filter-bar').classList.toggle('is-active', state.rangeMode);
   if (state.rangeStart) document.getElementById('range-start').value = toDateInputValue(state.rangeStart);
   if (state.rangeEnd)   document.getElementById('range-end').value   = toDateInputValue(state.rangeEnd);
@@ -1140,8 +1183,10 @@ function renderFixedDonutChart(fm) {
 
 function renderFixedBarChart() {
   destroyChart('barFixed');
-  const months = getLastNMonths(6);
-  const labels = months.map(formatMonthLabel);
+  const year = Number(state.selectedMonth.split('-')[0]);
+  document.getElementById('heading-bar-fixed').textContent = `Fixed Expenses Overview — ${year}`;
+  const months = getYearMonths(year);
+  const labels = months.map(formatMonthShort);
   const getTotalForMonth = mo => getActiveFixedRows(mo).reduce((s, r) => s + r.amount, 0);
   const totals = months.map(getTotalForMonth);
   const momData = computeMoMForMonths(months, getTotalForMonth);
@@ -1416,6 +1461,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('settings-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) hideSettingsModal();
+  });
+
+  /* ── Year filter ── */
+  document.getElementById('year-filter').addEventListener('change', e => {
+    populateMonthOptionsForYear(Number(e.target.value));
+    state.currentPage = 1;
+    closeDayDetail();
+    renderAll();
   });
 
   /* ── Month filter ── */
