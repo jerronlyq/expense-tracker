@@ -51,6 +51,8 @@ Rather than logging a row every month, `Fixed Expenses` uses one row per "chapte
 
 A month's active fixed rows = `Start Date <= month` AND (`End Date` blank OR `End Date >= month`) — see `isFixedRowActiveInMonth()` / `getActiveFixedRows()` in app.js. This reconstructs accurate totals for **any** month, past or present, without monthly re-entry: switching the header's month selector to a past month correctly shows what was active back then, not today's state.
 
+The Schedule table's per-row Status badge (`renderFixedTab()`) uses the same date-aware logic against the real current month (`toYYYYMM(new Date())`), not just "is an End Date present" — a row with an End Date a year in the future still reads as **Ongoing** today, only flipping to **Ended** once the actual current month passes it. Don't regress this back to a bare `!r.endDate` check.
+
 ### CORS handling (`fetchCsvWithFallback()` in app.js)
 Google Sheets redirects block direct browser fetches. Strategy, applied identically to both tab fetches:
 1. Direct `fetch()` with 6 s timeout

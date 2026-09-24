@@ -1293,9 +1293,15 @@ function renderFixedTab() {
     return;
   }
 
+  const todayKey = toYYYYMM(new Date());
   getSortedFixedSchedule().forEach(r => {
     const catColor = getCatColor(r.category);
-    const isOngoing = !r.endDate;
+    // "Ongoing" while today hasn't passed the End Date yet — a future End Date
+    // (e.g. a year out) should still read as ongoing today, only flipping to
+    // "Ended" once the real current month is past it. Matches the same
+    // date-aware semantics as isFixedRowActiveInMonth()/discontinuedCount,
+    // rather than just checking whether an End Date is present at all.
+    const isOngoing = !r.endDate || toYYYYMM(r.endDate) >= todayKey;
     const statusClass = isOngoing ? 'active' : 'discontinued';
     const statusLabel = isOngoing ? 'Ongoing' : 'Ended';
     const endLabel = r.endDate ? formatDisplayDate(r.endDate) : '—';
